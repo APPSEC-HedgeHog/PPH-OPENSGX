@@ -11,7 +11,7 @@ SGX_LIBS = $(LIBSGXDIR)/sgx-entry.o $(LIBSGXDIR)/libsgx.a \
 
 # OpenSSL Cases
 OPENSSL_CFLAGS = $(SGX_CFLAGS) -I$(LIBSGXDIR)/openssl/include
-OPENSSL_LIBS = $(LIBSGXDIR)/sgx-entry.o $(LIBSGXDIR)/libssl.a \
+OPENSSL_LIBS = $(LIBSGXDIR)/sgx-entry.o \
                $(LIBSGXDIR)/libcrypto.a $(LIBSGXDIR)/libsgx.a \
                $(LIBSGXDIR)/libc-sgx.a
 
@@ -28,11 +28,14 @@ POLARSSL_OBJS = polarssl/rsa.o polarssl/entropy.o polarssl/ctr_drbg.o \
 LDLIBS = -L. -lpolarssl -lelf
 
 # pph
-PPHDIR=../PolyPasswordHasher-C
-PPH_CFLAGS = -I$(PPHDIR)/include -I$(PPHDIR)
+PPH_DIR=../PolyPasswordHasher-C
+ENCLAVE_DIR=pph_enclave
+PPH_ENCLAVE_DIR=pph_enclave
+PPH_CFLAGS = -I$(PPH_DIR) -I$(ENCLAVE_DIR)/include
 CFLAGS := $(BASE_CFLAGS) -fno-stack-protector -fvisibility=hidden
-PPH_LDLIBS = $(PPHDIR)/lib
-PPH_LDFLAGS = -nostartfiles -Wl,-T,sgx.lds
+PPH_LDFLAGS = -static -nostdlib -nostartfiles -Wl,-T,sgx.lds
+PPH_SGX_LIBS = $(LIBSGXDIR)/sgx-entry.o $(LIBSGXDIR)/libcrypto.a $(LIBSGXDIR)/libssl.a $(LIBSGXDIR)/libsgx.a \
+           $(LIBSGXDIR)/libpolarssl-sgx.a $(LIBSGXDIR)/libc-sgx.a
 
 HDRS := $(wildcard include/sgx*.h)
 BINS := $(patsubst %.c,%,$(wildcard test/*.c)) \
@@ -85,11 +88,11 @@ demo/%.sgx: demo/%.o $(SGX_LIBS)
 non_enclave/%: non_enclave/%.o nonEncLib.o
 	$(CC) $(CFLAGS) $^ -o $@
 
-pph_enclave/%.o: pph_enclave/%.c
+pph_enclave/%.o: pph_enclave/%.c $(SGX_LIBS)
 	$(CC) -c $(SGX_CFLAGS) $(PPH_CFLAGS) -o $@ $<
 
-pph_enclave/%.sgx: pph_enclave/%.o $(SGX_LIBS) 
-	$(CC) $(PPH_LDFLAGS) $< -o $@ $(SGX_LIBS) $(PPH_LDLIBS)/libgfshare.o
+pph_enclave/%.sgx: pph_enclave/%.o
+	$(CC) $(SGX_LDFLAGS) $< -o $@ $(PPH_SGX_LIBS)
 
 clean:
 	rm -f polarssl/*.o lib/*.o *.o $(ALL) test/*.o sgx-runtime.o demo/*.conf demo/*.sgx pph-enclave/*.sgx
