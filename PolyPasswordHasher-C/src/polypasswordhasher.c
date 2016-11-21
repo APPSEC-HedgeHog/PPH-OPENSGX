@@ -22,7 +22,11 @@ int main(void)
   // needed to operate and initialize all of the data structures.
   context = pph_init_context(threshold, isolated_check_bits);
   
-  
+  return 0; 
+  //WORK IN PROGRESS - works till here
+  //Cause init_context works for now but with this implementation nothing below will work
+  //Test by removing the return
+
   // add some users, we send the context, a username, a password and a number
   // of shares to assign to the user. The a user can have many shares, and count
   // more towards the threshold. 
@@ -51,7 +55,6 @@ int main(void)
   // to bootstrap it. 
   pph_store_context(context,"securepasswords");
   
-while(1);
   // We should destroy a context when we finish to free sensible data, such as
   // the share information. The pph_destroy_context function ensures that all
   // of the data structures associated with the context are properly freed. 

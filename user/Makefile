@@ -30,7 +30,6 @@ LDLIBS = -L. -lpolarssl -lelf
 # pph
 PPH_DIR=../PolyPasswordHasher-C
 ENCLAVE_DIR=pph_enclave
-PPH_ENCLAVE_DIR=pph_enclave
 PPH_CFLAGS = -I$(PPH_DIR) -I$(ENCLAVE_DIR)/include
 CFLAGS := $(BASE_CFLAGS) -fno-stack-protector -fvisibility=hidden
 PPH_LDFLAGS = -static -nostdlib -nostartfiles -Wl,-T,sgx.lds

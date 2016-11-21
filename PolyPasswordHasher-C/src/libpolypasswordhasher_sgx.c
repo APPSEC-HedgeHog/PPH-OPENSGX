@@ -38,6 +38,7 @@ int NAME_BUF_SIZE = 256;
 //Note this is global so multi context will not work
 int fd_ea = -1;
 int fd_ae = -1;
+int init_done = 0;
 
 static int pipe_init(int flag_dir)
 {
@@ -102,6 +103,8 @@ static int pipe_open(char *unique_id, int is_write, int flag_dir)
 
 int initializePipe(char *enc_to_app, char * app_to_enc)
 {
+    if(init_done) return 0;
+    
 	if(pipe_init(0) < 0) {
         printf("Error in pipe_init");
         return 1;
@@ -116,7 +119,7 @@ int initializePipe(char *enc_to_app, char * app_to_enc)
         printf("Error in pipe_open");
         return 1;
     }
-	
+	init_done=1;
 	return 0;
 }
 

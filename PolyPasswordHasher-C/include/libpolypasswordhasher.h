@@ -201,6 +201,8 @@ typedef struct _pph_context{
   // this will contain entries to be updated after bootstrapping.
   pph_bootstrap_entry *bootstrap_entries;
 
+  //stores context array id in enclave
+  unsigned int pph_ctx_id ;
 } pph_context;
 
 

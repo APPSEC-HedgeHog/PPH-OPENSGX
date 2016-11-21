@@ -13,13 +13,16 @@
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/sha.h>
+#include "libpolypasswordhasher_sgx.h"
 
 #define RB_MODE_RD 0
 #define RB_MODE_WR 1
 #define MAX_NUMBER_OF_SHARES 255
 #define SHARE_LENGTH 256/8 
 #define DIGEST_LENGTH SHARE_LENGTH
+#define SIGNATURE_HASH_ITERATIONS 10000
 
+#define uint8 char
 /*INCLUDE SGX-MALLOC Insted of stdlib malloc*/
 #define XMALLOC malloc
 #define XFREE free
@@ -29,6 +32,7 @@ char TMP_DIRECTORY_CONF[] = "/tmp/ipc_conf";
 char TMP_DIRECTORY_RUN[] = "/tmp/ipc_run";
 char TMP_FILE_NUMBER_FMT[] =  "/pipe_";
 int NAME_BUF_SIZE = 256;
+char TAG[] = __FILE__;
 
 struct _gfshare_ctx {
   unsigned int sharecount;
@@ -38,6 +42,26 @@ struct _gfshare_ctx {
   unsigned char* buffer;
   unsigned int buffersize;
 };
+
+//Stores the sensitive data that was stored in libpph before.
+typedef struct _enclave_context {
+  uint8 * secret; //store secret
+  uint8 * AES; // copy- unused 
+  gfshare_ctx *share_context;  //store gfshare context after its init
+  int threshold;
+  uint8 secret_integrity[DIGEST_LENGTH];//digest
+} enclave_context;
+
+enclave_context ** contexts = NULL; //should contain array of contexts
+int current_idx = -1;
+int MAX_SUPPORTED_CONTEXTS = 2;
+/*this means we share a single pipe*/
+int fd_ea = -1;
+int fd_ae = -1;
+
+//Function prototype
+uint8 *generate_pph_secret(uint8 *integrity_check);
+void handle_pph_request(char * command, int len);
 
 static int pipe_init(int flag_dir)
 {
@@ -99,75 +123,155 @@ static int pipe_open(char *unique_id, int is_write, int flag_dir)
     return fd;
 }
 
-// For simplicity, this function do simple operation.
-// In the realistic scenario, key creation, signature generation and etc will be
-// the possible example.
-void do_secret(char *buf) 
+int pph_context_create(int threshold)
 {
-    for(int i=0; i<strlen(buf); i++)
-        buf[i]++;
+  unsigned char share_numbers[MAX_NUMBER_OF_SHARES];
+  int i;
+
+  if(MAX_SUPPORTED_CONTEXTS-1 == current_idx)// we cant handle any more contexts
+    return -1;
+  //Create Enclave Context
+  contexts[++current_idx] = malloc(sizeof(enclave_context));
+
+  //Generate secret
+  contexts[current_idx]->secret = contexts[current_idx]->AES = generate_pph_secret(contexts[current_idx]->secret_integrity);
+  if(contexts[current_idx]->secret == NULL) {
+    free(&contexts[current_idx]);
+    return -1;
+  }
+
+  contexts[current_idx]->threshold=threshold;
+  // 5) Initialize share context
+  for(i=0;i<MAX_NUMBER_OF_SHARES;i++) {
+    share_numbers[i] = (short)i+1;
+  }
+
+  contexts[current_idx]->share_context = NULL;
+
+  contexts[current_idx]->share_context = gfshare_ctx_init_enc( share_numbers,
+                                                 MAX_NUMBER_OF_SHARES-1,
+                                                 contexts[current_idx]->threshold,
+                                                 SHARE_LENGTH);
+
+  if(contexts[current_idx]->share_context == NULL) {
+    free(contexts[current_idx]->secret);
+    free(&contexts[current_idx]); 
+    return -1; 
+  }
+
+  gfshare_ctx_enc_setsecret(contexts[current_idx]->share_context, contexts[current_idx]->secret);
+
+  printf("[%s] context is created [%d]",TAG,current_idx);
+  return current_idx;
 }
 
-/* main operation. communicate with tor-gencert & tor process */
+
+uint8 *generate_pph_secret(uint8 *integrity_check)
+{
+  
+
+  uint8 *secret;
+  uint8 stream_digest[DIGEST_LENGTH], temp_digest[DIGEST_LENGTH];
+  int i;
+
+  if (integrity_check == NULL) {
+    return NULL;
+  }
+
+  // allocate memory
+  secret=malloc(sizeof(*secret)*DIGEST_LENGTH);
+  if(secret == NULL){
+    
+    return NULL;
+    
+  }
+
+  // generate a random stream
+  RAND_bytes(secret, DIGEST_LENGTH);
+ 
+  // Calculate the integrity check
+  _calculate_digest(stream_digest, secret, DIGEST_LENGTH);
+  for (i = 0; i < SIGNATURE_HASH_ITERATIONS - 1; i++){
+    memcpy(temp_digest, stream_digest, DIGEST_LENGTH);
+    _calculate_digest(stream_digest, temp_digest, DIGEST_LENGTH);
+  }
+  memcpy(integrity_check, stream_digest, DIGEST_LENGTH);
+
+  return secret;
+    
+}
+
+//Add for all API calls
+void handle_pph_request(char * command, int len)
+{
+  printf(" handle_request  enter");
+
+  //Add else if conditions for API calls. 
+  //All COMMANDS must go in libpolypasswordhasher_sgx.h
+  if(!strncmp(command, INIT_CONTEXT, len)) //This call handles Init context
+  {
+    int threshold;
+    read(fd_ae, &threshold, sizeof(threshold));
+    int context_id = pph_context_create(threshold);
+    write(fd_ea, &context_id, sizeof(int));
+  }
+}
+
+/* main operation. communicate with santiago */
 void enclave_main(int argc, char **argv)
 {
-    int fd_ea = -1;
-    int fd_ae = -1;
 	int i;
-	EVP_PKEY identity_key_set;
-	unsigned char share_numbers[MAX_NUMBER_OF_SHARES];
 
-	for(i=0;i<MAX_NUMBER_OF_SHARES;i++) {
-    	share_numbers[i] = (short)i+1;
-  	}
-	
-	//this is just for test to see if ported gfshare compiles 
-	gfshare_ctx_init_enc( share_numbers,
-                         MAX_NUMBER_OF_SHARES-1,
-                         0,
-                         SHARE_LENGTH);
+  char port_enc_to_app[NAME_BUF_SIZE];
+  char port_app_to_enc[NAME_BUF_SIZE];
+  printf("[%d] \n",argc);
 
-    char port_enc_to_app[NAME_BUF_SIZE];
-    char port_app_to_enc[NAME_BUF_SIZE];
-	printf("[%d] \n",argc);
-	
-    if(argc != 5) {
-        printf("Usage: [PORT_ENCLAVE_TO_APP] [PORT_APP_TO_ENCLAVE]\n");
-        sgx_exit(NULL);
-    }
-    
-    strcpy(port_enc_to_app, argv[3]);
-    strcpy(port_app_to_enc, argv[4]);
+  if(argc != 5) {
+      printf("Usage: [PORT_ENCLAVE_TO_APP] [PORT_APP_TO_ENCLAVE]\n");
+      sgx_exit(NULL);
+  }
+  
+  strcpy(port_enc_to_app, argv[3]);
+  strcpy(port_app_to_enc, argv[4]);
 
-	printf("HI PIPE 1 [%s] PIPE 2 [%s] \n",port_enc_to_app,port_app_to_enc);
-    if(pipe_init(0) < 0) {
-            puts("Error in pipe_init");
-            sgx_exit(NULL);
-    }
+  //printf("PIPE to app is  [%s] PIPE to enclave is [%s] \n",port_enc_to_app,port_app_to_enc);
+  if(pipe_init(0) < 0) {
+          puts("Error in pipe_init");
+          sgx_exit(NULL);
+  }
 
-    if((fd_ea = pipe_open(port_enc_to_app, RB_MODE_WR, 0)) < 0) {
-            puts("Error in pipe_open");
-            sgx_exit(NULL);
-    }
+  if((fd_ea = pipe_open(port_enc_to_app, RB_MODE_WR, 0)) < 0) {
+          puts("Error in pipe_open");
+          sgx_exit(NULL);
+  }
 
-    if((fd_ae = pipe_open(port_app_to_enc, RB_MODE_RD, 0)) < 0) {
-            puts("Error in pipe_open");
-            sgx_exit(NULL);
-    }
+  if((fd_ae = pipe_open(port_app_to_enc, RB_MODE_RD, 0)) < 0) {
+          puts("Error in pipe_open");
+          sgx_exit(NULL);
+  }
 
-    // Read the request operations
-    int len;
+  //printf(" before malloc \n");
+  //Init context array
+  contexts = malloc(sizeof(enclave_context *) * MAX_SUPPORTED_CONTEXTS);//For now only one context TODO: dynamic
+  //printf(" after malloc \n");
+  // Read the request operations
+  int len;
+  
+ 
+  while(1)
+  {
     char msg[20]={0};
-   
-    
-    read(fd_ae, msg, 15);
-	puts(msg);
-    printf("ENCLAVE: message from host [%s] \n",msg);
-    // Send the result
-    write(fd_ea, "Hi Santiago !!!", 15);       
-	while(1);
-    close(fd_ea);
-    close(fd_ae);
+    //printf(" reading \n");
+    read(fd_ae, &len, sizeof(int));//first read how many characters
+    printf(" first [%d] \n",len);
+    read(fd_ae, msg, len+1);
+    printf(" second [%s] \n",msg);
+    //printf(" goto handle request \n");
+    handle_pph_request(msg, len);
+  }
+
+  close(fd_ea);
+  close(fd_ae);
 }
 
 
@@ -371,7 +475,7 @@ gfshare_ctx_dec_extract( gfshare_ctx* ctx,
   }
 }
 
-void _calculate_digest(char *digest, const char *password,
+void _calculate_digest(uint8 *digest, const uint8 *password,
     unsigned int length) {
   EVP_MD_CTX mctx;
 
@@ -387,7 +491,7 @@ void _calculate_digest(char *digest, const char *password,
 
 }
 
-void _encrypt_digest(char *result, char *digest, char *AES_key, char* iv) {
+void _encrypt_digest(uint8 *result, uint8 *digest, uint8 *AES_key, uint8* iv) {
 
   EVP_CIPHER_CTX en_ctx;
   int c_len,f_len;

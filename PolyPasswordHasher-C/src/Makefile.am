@@ -6,7 +6,7 @@ lib_LTLIBRARIES = libpolypasswordhasher.la
 libpolypasswordhasher_la_SOURCES = libpolypasswordhasher.c\
 									libpolypasswordhasher_sgx.c\
 								$(top_builddir)/include/libgfshare.h\
-							    $(top_builddir)/include/libpolypasswordhasher.h
+							    $(top_builddir)/libpolypasswordhasher.h
 libpolypasswordhasher_la_LIBADD = $(top_builddir)/lib/libgfshare.la
 	
 

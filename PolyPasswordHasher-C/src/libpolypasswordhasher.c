@@ -133,14 +133,14 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
   // 3) generate random secret, we generate a random byte stream and append
   // half of the 16 byte hash to the end of it, we have chosen to use
   // only four hash bytes in order to have more random bytes. 
-  context->secret = generate_pph_secret(context->secret_integrity);
+  // context->secret = generate_pph_secret(context->secret_integrity);
 
-  if(context->secret == NULL) {
-    free(context);
+  // if(context->secret == NULL) {
+  //   free(context);
     
-    return NULL;
+  //   return NULL;
     
-  }
+  // }
 
 
 
@@ -152,7 +152,7 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
 
   // We are using the secret to encrypt shielded accounts, so we set the 
   // AES key to be the same as the secret. 
-  context->AES_key = context->secret;
+  //context->AES_key = context->secret;
 
   // initialize the rest
   context->next_entry = 1;
@@ -168,31 +168,36 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
 
   // Update the share context, the size of the shares is reduced by the number
   // or isolated-check-bits.
-  context->share_context = NULL;
-  context->share_context = gfshare_ctx_init_enc( share_numbers,
-                                                 MAX_NUMBER_OF_SHARES-1,
-                                                 context->threshold,
-                                                 SHARE_LENGTH);
-  if(context->share_context == NULL) {
-    free(context->secret);
-    free(context);
+  // context->share_context = NULL;
+  // context->share_context = gfshare_ctx_init_enc( share_numbers,
+  //                                                MAX_NUMBER_OF_SHARES-1,
+  //                                                context->threshold,
+  //                                                SHARE_LENGTH);
+  // if(context->share_context == NULL) {
+  //   free(context->secret);
+  //   free(context);
     
-    return NULL;
+  //   return NULL;
     
-  }
+  // }
   
   
-  gfshare_ctx_enc_setsecret(context->share_context, context->secret);
+  //gfshare_ctx_enc_setsecret(context->share_context, context->secret);
   
   /*TEST-OPENSGX-SEGMENT*/
   if(initializePipe("TO_ENCLAVE","TO_HOST") == 1)
-	printf("LibPPH: ERROR CREATING PIPE \n");
-  write_to_enclave("Hi I'm Santiago",15);
-  char buf[20]={0};
-  read_from_enclave(buf,15);
-  printf("libpph:: data from enclave [%s]",buf); 
-  /*TEST-OPENSGX-SEGMENT*/
-  // finish, return our product
+	   printf("LibPPH: ERROR CREATING PIPE \n");
+  
+  int len = strlen(INIT_CONTEXT);
+  write_to_enclave(&len, sizeof(int));
+  write_to_enclave(INIT_CONTEXT,strlen(INIT_CONTEXT)+1);
+  write_to_enclave(&threshold,sizeof(int));
+
+  int ctxId ;
+  read_from_enclave(&ctxId,sizeof(int));
+  printf("libpph:: data from enclave, context id = [%d]",ctxId); 
+
+  context->pph_ctx_id =ctxId;
   return context;
     
 }
