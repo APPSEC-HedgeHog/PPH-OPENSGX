@@ -150,6 +150,7 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
   // since this is a new context, we are under normal operation.
   context->is_normal_operation = true; 
 
+  // opensgx: the secret has been moved to enclave
   // We are using the secret to encrypt shielded accounts, so we set the 
   // AES key to be the same as the secret. 
   //context->AES_key = context->secret;
@@ -166,6 +167,7 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
     share_numbers[i] = (short)i+1;
   }
 
+  // opensgx: operations moved to enclave
   // Update the share context, the size of the shares is reduced by the number
   // or isolated-check-bits.
   // context->share_context = NULL;
@@ -193,7 +195,7 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
   }
   
  
-
+  // opensgx: enclave command INIT_CONTEXT
   int len = strlen(INIT_CONTEXT);
 
   write_to_enclave(&len, sizeof(int));
@@ -205,7 +207,9 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
   printf("libppph:: data from enclave, context id = [%d] \n",ctxId); 
   context->pph_ctx_id =ctxId;
 
-  if(ctxId == -1) //it means enclave is out of instances
+  // -1 means enclave is out of instances
+  // also used for a bunch of other errors in INIT_CONTEXT
+  if(ctxId == -1)
   {
     free(context);
     context = NULL;
@@ -327,6 +331,7 @@ PPH_ERROR pph_destroy_context(pph_context *context){
 
   }
   
+  // TODO we free context and then call context->pph_ctx_id below, is this an error?
   // now it is safe to free the context
   free(context);
 
@@ -357,7 +362,7 @@ PPH_ERROR pph_destroy_context(pph_context *context){
   read_from_enclave(&success,sizeof(int));
   printf("libppph:: delete context returned [%d] \n",success);
 
-  if(success == 1)
+  if(success == -1)
   {
     return PPH_BAD_PTR;
   }
