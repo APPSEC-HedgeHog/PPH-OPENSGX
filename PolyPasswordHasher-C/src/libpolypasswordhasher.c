@@ -331,10 +331,7 @@ PPH_ERROR pph_destroy_context(pph_context *context){
 
   }
   
-  // TODO we free context and then call context->pph_ctx_id below, is this an error?
-  // now it is safe to free the context
-  free(context);
-
+  
   /*TEST-OPENSGX-SEGMENT*/
   if(initializePipe("TO_ENCLAVE", "TO_HOST") == 1)
   {
@@ -349,9 +346,12 @@ PPH_ERROR pph_destroy_context(pph_context *context){
 
   int ctxId ;
   ctxId = context->pph_ctx_id;
+
+  // now it is safe to free the context
+  free(context);
+
   if(ctxId == -1)
   {
-    free(context);
     return PPH_BAD_PTR;
   }
 
