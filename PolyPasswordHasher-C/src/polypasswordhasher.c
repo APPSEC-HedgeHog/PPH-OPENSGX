@@ -21,10 +21,11 @@ int main(void)
   // setup the context, this will generate us the shares, setup information 
   // needed to operate and initialize all of the data structures.
   context = pph_init_context(threshold, isolated_check_bits);
-  
+  pph_destroy_context(context);
   return 0; 
   //WORK IN PROGRESS - works till here
-  //Cause init_context works for now but with this implementation nothing below will work
+  //Cause init_context and destroy context
+  //works for now but with this implementation nothing below will work
   //Test by removing the return
 
   // add some users, we send the context, a username, a password and a number

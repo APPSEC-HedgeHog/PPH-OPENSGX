@@ -185,19 +185,34 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
   //gfshare_ctx_enc_setsecret(context->share_context, context->secret);
   
   /*TEST-OPENSGX-SEGMENT*/
-  if(initializePipe("TO_ENCLAVE","TO_HOST") == 1)
-	   printf("LibPPH: ERROR CREATING PIPE \n");
+  if(initializePipe("TO_ENCLAVE", "TO_HOST") == 1){
+    printf("LibPPH: ERROR CREATING PIPE \n");
+    free(context);
+    context = NULL;
+    return context;
+  }
   
+ 
+
   int len = strlen(INIT_CONTEXT);
+
   write_to_enclave(&len, sizeof(int));
   write_to_enclave(INIT_CONTEXT,strlen(INIT_CONTEXT)+1);
   write_to_enclave(&threshold,sizeof(int));
 
   int ctxId ;
   read_from_enclave(&ctxId,sizeof(int));
-  printf("libpph:: data from enclave, context id = [%d]",ctxId); 
-
+  printf("libppph:: data from enclave, context id = [%d] \n",ctxId); 
   context->pph_ctx_id =ctxId;
+
+  if(ctxId == -1) //it means enclave is out of instances
+  {
+    free(context);
+    context = NULL;
+  }
+
+  /*TEST-OPENSGX-SEGMENT*/
+
   return context;
     
 }
@@ -271,9 +286,9 @@ PPH_ERROR pph_destroy_context(pph_context *context){
   
   
   // do child freeing.
-  if(context->secret !=NULL){
-    free(context->secret);
-  }
+  // if(context->secret !=NULL){
+  //   free(context->secret);
+  // }
 
   if(context->account_data != NULL){
     next = context->account_data;
@@ -288,9 +303,9 @@ PPH_ERROR pph_destroy_context(pph_context *context){
 
 
 
-  if(context->share_context!=NULL){
-    gfshare_ctx_free(context->share_context);
-  }
+  // if(context->share_context!=NULL){
+  //   gfshare_ctx_free(context->share_context);
+  // }
   
 
   // free the previous logins
@@ -315,6 +330,41 @@ PPH_ERROR pph_destroy_context(pph_context *context){
   // now it is safe to free the context
   free(context);
 
+  /*TEST-OPENSGX-SEGMENT*/
+  if(initializePipe("TO_ENCLAVE", "TO_HOST") == 1)
+  {
+    printf("LibPPH: ERROR CREATING PIPE \n");
+    return PPH_BAD_PTR;
+  }
+  
+  int len = strlen(DEL_CONTEXT);
+  write_to_enclave(&len, sizeof(int));
+  write_to_enclave(DEL_CONTEXT,strlen(DEL_CONTEXT)+1);
+  
+
+  int ctxId ;
+  ctxId = context->pph_ctx_id;
+  if(ctxId == -1)
+  {
+    free(context);
+    return PPH_BAD_PTR;
+  }
+
+  write_to_enclave(&ctxId,sizeof(int));
+  
+
+  int success ;
+  read_from_enclave(&success,sizeof(int));
+  printf("libppph:: delete context returned [%d] \n",success);
+
+  if(success == 1)
+  {
+    return PPH_BAD_PTR;
+  }
+
+  close_pipes();//If more than one server runs this can be a problem, for now this is safe
+  /*TEST-OPENSGX-SEGMENT*/
+    
   return PPH_ERROR_OK;
     
 }

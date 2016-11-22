@@ -54,7 +54,7 @@ typedef struct _enclave_context {
 
 enclave_context ** contexts = NULL; //should contain array of contexts
 int current_idx = -1;
-int MAX_SUPPORTED_CONTEXTS = 2;
+int MAX_SUPPORTED_CONTEXTS = 1;
 /*this means we share a single pipe*/
 int fd_ea = -1;
 int fd_ae = -1;
@@ -123,20 +123,60 @@ static int pipe_open(char *unique_id, int is_write, int flag_dir)
     return fd;
 }
 
+int pph_context_destroy(int contextId)
+{
+  int retval = 1;
+
+  if(contexts[contextId] == NULL)
+    return retval;
+
+  //Lets free the secret
+  if(contexts[contextId]->secret != NULL)
+  {
+    free(contexts[contextId]->secret);
+    contexts[contextId]->secret = NULL;
+  }
+
+  //dont free AES again, its the same as secret
+
+  //free gfshare context
+  if(contexts[contextId]->share_context != NULL)
+  {
+    gfshare_ctx_free( contexts[contextId]->share_context);
+    contexts[contextId]->share_context=NULL;
+  }
+
+  //free the enclave context
+  free(contexts[contextId]);
+
+  //book keeping update
+  if(current_idx >0)
+    current_idx--;
+  else
+    current_idx=-1;
+
+  retval =0; //success
+  printf("[%s] context [%d] is successfully destroyed  \n",TAG,contextId);
+  return retval; 
+}
+
 int pph_context_create(int threshold)
 {
   unsigned char share_numbers[MAX_NUMBER_OF_SHARES];
   int i;
 
   if(MAX_SUPPORTED_CONTEXTS-1 == current_idx)// we cant handle any more contexts
+  {
+    printf("[%s] contexts exhausted! max supported [%d] \n",TAG,MAX_SUPPORTED_CONTEXTS);
     return -1;
+  }
   //Create Enclave Context
   contexts[++current_idx] = malloc(sizeof(enclave_context));
 
   //Generate secret
   contexts[current_idx]->secret = contexts[current_idx]->AES = generate_pph_secret(contexts[current_idx]->secret_integrity);
   if(contexts[current_idx]->secret == NULL) {
-    free(&contexts[current_idx]);
+    free(contexts[current_idx]);
     return -1;
   }
 
@@ -155,13 +195,13 @@ int pph_context_create(int threshold)
 
   if(contexts[current_idx]->share_context == NULL) {
     free(contexts[current_idx]->secret);
-    free(&contexts[current_idx]); 
+    free(contexts[current_idx]); 
     return -1; 
   }
 
   gfshare_ctx_enc_setsecret(contexts[current_idx]->share_context, contexts[current_idx]->secret);
 
-  printf("[%s] context is created [%d]",TAG,current_idx);
+  printf("[%s] context is created [%d] \n",TAG,current_idx);
   return current_idx;
 }
 
@@ -204,7 +244,7 @@ uint8 *generate_pph_secret(uint8 *integrity_check)
 //Add for all API calls
 void handle_pph_request(char * command, int len)
 {
-  printf(" handle_request  enter");
+  printf(" handle_request  enter command [%s] \n",command);
 
   //Add else if conditions for API calls. 
   //All COMMANDS must go in libpolypasswordhasher_sgx.h
@@ -214,6 +254,13 @@ void handle_pph_request(char * command, int len)
     read(fd_ae, &threshold, sizeof(threshold));
     int context_id = pph_context_create(threshold);
     write(fd_ea, &context_id, sizeof(int));
+  }
+  else if(!strncmp(command, DEL_CONTEXT, len)) //This call handles Delete context
+  {
+    int context_id;
+    read(fd_ae, &context_id, sizeof(context_id));
+    int success_msg = pph_context_destroy(context_id);
+    write(fd_ea, &success_msg, sizeof(int));
   }
 }
 
@@ -263,9 +310,9 @@ void enclave_main(int argc, char **argv)
     char msg[20]={0};
     //printf(" reading \n");
     read(fd_ae, &len, sizeof(int));//first read how many characters
-    printf(" first [%d] \n",len);
+    //printf(" first [%d] \n",len);
     read(fd_ae, msg, len+1);
-    printf(" second [%s] \n",msg);
+    //printf(" second [%s] \n",msg);
     //printf(" goto handle request \n");
     handle_pph_request(msg, len);
   }

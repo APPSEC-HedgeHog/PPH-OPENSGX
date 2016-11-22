@@ -133,3 +133,10 @@ void read_from_enclave(char *buf, int len)
 {
 	read(fd_ea, buf, len); 
 }
+
+void close_pipes()
+{
+    close(fd_ae);
+    close(fd_ea);
+    init_done=0;
+}
