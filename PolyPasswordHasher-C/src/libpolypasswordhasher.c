@@ -129,7 +129,7 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
   context->isolated_check_bits=isolated_check_bits;
 
 
-
+  // opensgx: secret generation moved to enclave
   // 3) generate random secret, we generate a random byte stream and append
   // half of the 16 byte hash to the end of it, we have chosen to use
   // only four hash bytes in order to have more random bytes. 
@@ -150,7 +150,7 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
   // since this is a new context, we are under normal operation.
   context->is_normal_operation = true; 
 
-  // opensgx: the secret has been moved to enclave
+  // opensgx: the secret storage has been moved to enclave
   // We are using the secret to encrypt shielded accounts, so we set the 
   // AES key to be the same as the secret. 
   //context->AES_key = context->secret;
@@ -167,7 +167,7 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
     share_numbers[i] = (short)i+1;
   }
 
-  // opensgx: operations moved to enclave
+  // opensgx: share context moved to enclave for share operations
   // Update the share context, the size of the shares is reduced by the number
   // or isolated-check-bits.
   // context->share_context = NULL;
@@ -194,7 +194,7 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
     return context;
   }
   
- 
+  /*TEST-OPENSGX-SEGMENT*/
   // opensgx: enclave command INIT_CONTEXT
   int len = strlen(INIT_CONTEXT);
 
@@ -214,8 +214,6 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
     free(context);
     context = NULL;
   }
-
-  /*TEST-OPENSGX-SEGMENT*/
 
   return context;
     
@@ -275,7 +273,6 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
 
 PPH_ERROR pph_destroy_context(pph_context *context){
 
-
   pph_account_node *current,*next;
   pph_previous_login *logins, *current_login;
   pph_bootstrap_entry *this_bootstrap_entry, *next_bootstrap_entry;
@@ -288,7 +285,7 @@ PPH_ERROR pph_destroy_context(pph_context *context){
     
   }
   
-  
+  // opensgx: secret freeing must be done in enclave
   // do child freeing.
   // if(context->secret !=NULL){
   //   free(context->secret);
@@ -306,7 +303,7 @@ PPH_ERROR pph_destroy_context(pph_context *context){
   }
 
 
-
+  // opensgx: gfshare freeing must be done in enclave
   // if(context->share_context!=NULL){
   //   gfshare_ctx_free(context->share_context);
   // }
@@ -445,7 +442,7 @@ PPH_ERROR pph_destroy_context(pph_context *context){
 * CHANGES :
 *   Added support for different length accounts
 */
-
+// TODO add enclave functionality
 PPH_ERROR pph_create_account(pph_context *ctx, const uint8 *username,
                         unsigned int username_length, uint8 *password, 
                         unsigned int password_length, uint8 shares)
@@ -494,6 +491,7 @@ PPH_ERROR pph_create_account(pph_context *ctx, const uint8 *username,
     
   }
 
+  // TODO remove AES_key check (is there a case where is_normal_operation true but we have no AES key?
   // check if we are able to get shares from the context vault
   if(ctx->is_normal_operation != true || ctx->AES_key == NULL) {
    
@@ -527,6 +525,11 @@ PPH_ERROR pph_create_account(pph_context *ctx, const uint8 *username,
 
   for(i = 0; i < shares; i++) {
     
+	// TODO share value needs to be computed in enclave
+	// a) we can compute random salt, password+salt, and salt hash here before passing it into enclave if we want to minimize enclave operations
+	// b) in enclave, compute share XOR hash and return to this function
+	// c) we must fix create_protector_entry so that it takes in shareXORhash instead of computing it itself
+
     // 3) Allocate entries for each account
     // get a new share value
     gfshare_ctx_enc_getshare( ctx->share_context, ctx->next_entry,
@@ -535,6 +538,7 @@ PPH_ERROR pph_create_account(pph_context *ctx, const uint8 *username,
     // get a salt for the password
     RAND_bytes(salt_buffer, MAX_SALT_LENGTH); 
 
+    // TODO create_protector_entry needs to be adjusted so it doesn't handle share directly, only share XOR hash
     // Try to get a new entry.
     entry_node = create_protector_entry(password, password_length, salt_buffer,
         MAX_SALT_LENGTH, share_data, SHARE_LENGTH, ctx->isolated_check_bits);
@@ -567,6 +571,9 @@ PPH_ERROR pph_create_account(pph_context *ctx, const uint8 *username,
     // get a salt for the password
     RAND_bytes(salt_buffer, MAX_SALT_LENGTH); 
  
+    // TODO remove AES_key check here; again is there ever a case when is_normal_operation true but AES_key is null?
+    // no other changes in if section because we do not deal with shares in bootstrap mode
+
     // generate the entry we generate bootstrap accounts when the 
     // context is bootstrapping
     if (ctx->is_normal_operation == false || ctx->AES_key == NULL) {
@@ -584,7 +591,14 @@ PPH_ERROR pph_create_account(pph_context *ctx, const uint8 *username,
         ctx->bootstrap_entries = bootstrap_entry_node;
       }
 
-    } else {
+    }
+
+    /* TODO this needs to be adjusted so that AES_key encryption is handled inside the enclave
+    * a) compute hash of salted password and pass that into enclave
+    * b) in enclave, compute AES encryption of hash with secret as AES_key, and pass back the result for create_shielded_entry
+    * c) we need to change create_shielded_entry to take in the encrypted password hash instead of handling the AES_key directly
+    */
+    else {
       entry_node = create_shielded_entry(password, password_length,
           salt_buffer, MAX_SALT_LENGTH, ctx->AES_key, DIGEST_LENGTH,
           ctx->isolated_check_bits);
@@ -684,7 +698,7 @@ PPH_ERROR pph_create_account(pph_context *ctx, const uint8 *username,
 * CHANGES :
 *  (21/04/2014): Added support for non-null-terminated usernames and passwords.
 */
-
+// TODO add enclave functionality
 PPH_ERROR pph_check_login(pph_context *ctx, const char *username, 
                           unsigned int username_length, uint8 *password,
                           unsigned int password_length){
@@ -780,6 +794,7 @@ PPH_ERROR pph_check_login(pph_context *ctx, const char *username,
         
       }
 
+      // TODO remove AES_key check, can probably be replaced with is_normal_operation check
       // check we have a shielded key
       if(ctx->AES_key == NULL && ctx->isolated_check_bits == 0){
         
@@ -814,6 +829,7 @@ PPH_ERROR pph_check_login(pph_context *ctx, const char *username,
     return PPH_ERROR_OK;
   }
 
+  // we are in bootstrap mode, no share manipulation needed
   if(ctx->is_normal_operation != true){
 
     // we should store this login for verification after bootstrapping;
@@ -861,6 +877,11 @@ PPH_ERROR pph_check_login(pph_context *ctx, const char *username,
     // first, check if the account is a threshold or shielded account.
     if(sharenumber == 0){ /* Shielded account */
       
+      /* TODO migrate this part into enclave -- basically all of _encrypt_digest functionality in b
+      *  a) calculate the hash of salted password (I htink this is already done for us as resulting_hash) and pass into enclave
+      *  b) compute xored_hash value inside the enclave (ie, calculate AES encryption of resulting_hash with AES_key)
+      *  c) pass xored_hash value out of enclave for comparison
+      */
       // now we should calculate the expected hash by encrypting it
       _encrypt_digest(xored_hash, resulting_hash, ctx->AES_key, current_entry->salt);
 
@@ -887,17 +908,31 @@ PPH_ERROR pph_check_login(pph_context *ctx, const char *username,
     
       return PPH_ERROR_OK;
     
-    }else{
-    
+    }else{ /* protector account */
+      /*
+       *  TODO migrate this section into enclave since we're calculating the share value
+       *  a) compute share number inside enclave (gfshare_ctx_enc_getshare)
+       *  b) pass resulting_hash (which is the hash of the salted password provided by the user) and xored_hash
+       *  		(which is the stored share XOR salted hash that we have with the user account) both into the enclave
+       *  c) take XOR of xored_hash with our computed share value inside enclave (this will give us the correct hash of the salted password to check against)
+       *  d) compare result from part c (removing the share lock from user password entry) with resulting_hash (user-provided password for check) within enclave
+       *  e) if comparison matches, user is authenticated correctly; otherwise it is the wrong login info -- either way pass this value back out to PPH
+       */
+
+      // TODO part a: we should  move gfshare_ctx_enc_getshare into enclave
       // we have a non shielded account instead, since the sharenumber is 
       // not 0
       gfshare_ctx_enc_getshare(ctx->share_context, sharenumber, share_data);
 
+      // TODO part b: we should send xored_hash into enclave
       // xor the thing back to normal
       _xor_share_with_digest(xored_hash,current_entry->sharexorhash,
           share_data, DIGEST_LENGTH);
       
-      
+      // TODO part b: we should send resulting_hash into enclave
+      // part c: take the XOR of xored_hash with share value in enclave
+      // part d: compare results in enclave
+      // part e: send results to the if check below for icb checking
       // compare both.
       if(memcmp(resulting_hash, xored_hash, DIGEST_LENGTH)){
 
@@ -990,7 +1025,7 @@ PPH_ERROR pph_check_login(pph_context *ctx, const char *username,
 * CHANGES :
 *     (03/25/14): Secret consistency check was added. 
 */
-
+// TODO implement enclave stuff
 PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
                           const uint8 *usernames[], 
                           unsigned int username_lengths[],
@@ -999,6 +1034,7 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
   
   
   uint8 share_numbers[MAX_NUMBER_OF_SHARES];
+  //TODO gfshare_ctx *G should be in enclave
   gfshare_ctx *G;
   unsigned int i;
   uint8 secret[SHARE_LENGTH];
@@ -1031,6 +1067,7 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
     share_numbers[i] = 0;
   }
   
+  // TODO this should be moved inside enclave
   // initialize a recombination context
   G = gfshare_ctx_init_dec( share_numbers, MAX_NUMBER_OF_SHARES-1, SHARE_LENGTH);
 
@@ -1058,18 +1095,27 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
           // shares using their information, traverse his entries
           while(entry!=NULL){
 
-            // calculate the digest given the password.
+              /* TODO move this into enclave
+               * a) calculate digest (hash of salted password) -- this can be done outside enclave so no change here
+               * b) send digest and protector value into enclave
+               * c) take xor of digest and protector value to obtain share inside the enclave
+               * d) give share to the recombinator inside the enclave
+               */
+
+        	  // TODO part a: calculate the digest given the password and part b send into enclave
             memcpy(salted_password,entry->salt,entry->salt_length);
             memcpy(salted_password+entry->salt_length, passwords[i],
                 password_lengths[i]);
             _calculate_digest(estimated_digest,salted_password,
              entry->salt_length + password_lengths[i]);
 
+            // TODO part c
             // xor the obtained digest with the protector value to obtain
             // our share.
             _xor_share_with_digest(estimated_share,entry->sharexorhash,
                 estimated_digest, SHARE_LENGTH);
          
+            // TODO part d: the recombinator needs to be moved into the enclave
             // give share to the recombinator. 
             share_numbers[entry->share_number] = entry->share_number+1;
             gfshare_ctx_dec_giveshare(G, entry->share_number,estimated_share);
@@ -1084,6 +1130,19 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
   }
 
 
+  /* TODO
+   * a) the recombination of the secret needs to be moved into the enclave
+   * b) store secret in enclave + generate new coefficients / create enclave context
+   * c) create gfshare in enclave
+   * d) in pph, we are now in normal operation so move out of bootstrap mode
+   * e) update bootstrap accounts: we need to send stored hash (this is only hash of salted password
+   *    since we didn't have the secret before while we were making/verifying bootstrap accounts) into enclave
+   *    for protector entries: take the XOR of that hash with the share (calculate share value inside enclave)
+   *      and send share XOR hash back to pph to be stored with user account
+   *    for shielded entries: encrypt salted hash with AES_key and send that back to pph to be stored with user account
+   */
+
+  // TODO part a: recombination of secret and verfication
   // now we attempt to recombine the secret, we have given him all of the 
   // obtained shares.
   gfshare_ctx_dec_newshares(G, share_numbers);
@@ -1095,6 +1154,7 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
     
   }
 
+  // TODO part b: store secret
   // else, we have a correct secret and we will copy it back to the provided
   // context.
   if(ctx->secret == NULL){
@@ -1102,6 +1162,7 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
   }
   memcpy(ctx->secret,secret,SHARE_LENGTH);
 
+  // TODO part c: initialize gfshare_context which is an object inside enclave
   // if the share context is not initialized, initialize one with the
   // information we have about our context. 
   if(ctx->share_context == NULL) {
@@ -1114,12 +1175,16 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
                                                SHARE_LENGTH);
   }
   
+  // TODO part b: AES_key is same as secret, we set secret in gfshare_ctx_enc_setsecret which RESCRAMBLES coefficients
   // we have an initialized share context, we set the recombined secret to the
   // context's secret and set the flag to one so it is ready to use.
   gfshare_ctx_enc_setsecret(ctx->share_context, ctx->secret);
+
+  // TODO part d: is_normal_operation SHOULD NOT be moved to enclave
   ctx->is_normal_operation = true;
   ctx->AES_key = ctx->secret;
 
+  // TODO part e: encrypting the bootstrap accounts with the PPH method
   /* update the bootstrap accounts */
   bootstrap_update_entry = ctx->bootstrap_entries;
   while(bootstrap_update_entry != NULL) {
@@ -1162,7 +1227,7 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
 
       gfshare_ctx_enc_getshare(ctx->share_context, 
               (uint8)this_login->entry->share_number, estimated_share);
-      _xor_share_with_digest(estimated_digest, this_login->digest, estimated_share, 
+      _xor_share_with_digest(estimated_digest, this_login->digest, estimated_share,
               DIGEST_LENGTH);
     }
 
@@ -1232,7 +1297,7 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
 * CHANGES :
 *     None as of this version
 */
-
+// TODO add enclave functionality
 PPH_ERROR pph_store_context(pph_context *ctx, const unsigned char *filename){
   
   
@@ -1257,6 +1322,9 @@ PPH_ERROR pph_store_context(pph_context *ctx, const unsigned char *filename){
   // we backup the context so we can mess with it without breaking anything. 
   memcpy(&context_to_store,ctx,sizeof(*ctx));
 
+  /* TODO AES key and secret are no longer in context, but we should go to enclave
+   * to delete them as we did with pph_delete_context (and delete enclave_context in general)
+   */
   // NULL out the pointers, we won't store that, not even where it used to point
   context_to_store.share_context = NULL;
   context_to_store.AES_key = NULL;
@@ -1267,6 +1335,12 @@ PPH_ERROR pph_store_context(pph_context *ctx, const unsigned char *filename){
   // set this context's information to botstrapping.
   context_to_store.is_normal_operation = false; 
 
+  /* TODO the gfshare context is now stored in enclave, which we don't have to worry about copying
+   * since we only store user accounts (I think...), however we should probably check that gfshare context
+   * is deleted from enclave
+   */
+  // we need to get data like threshold, size, etc. from gfshare and then save that to file
+  // but NOT _enclave_context data because that is sensitive
 
   // 2) open selected file
   fp=fopen(filename,"wb");
@@ -1346,7 +1420,8 @@ PPH_ERROR pph_store_context(pph_context *ctx, const unsigned char *filename){
 * CHANGES :
 *     None as of this version
 */
-
+// TODO add enclave functionality -- as of now I don't think we need to make any changes here
+// since we can't have a secret yet, and gfshare context is initialized during bootstrap switchover
 pph_context *pph_reload_context(const unsigned char *filename){
 
 
@@ -1502,7 +1577,7 @@ pph_context *pph_reload_context(const unsigned char *filename){
 * CHANGES :
 *     None as of this version
 */
-
+// TODO enable enclave functionality -- but probably not urgent since this seems to be a demo function
 int PHS(void *out, size_t outlen, const void *in, size_t inlen,
    const void* salt, size_t saltlen, int tcost, int mcost){
   
@@ -1584,7 +1659,7 @@ int PHS(void *out, size_t outlen, const void *in, size_t inlen,
 
 // this generates a random secret of the form [stream][streamhash], the 
 // parameters are the length of each section of the secret
-
+// TODO should we remove this? it's a duplicate of what's in the enclave (and pph secret gen should be only in enclave)
 uint8 *generate_pph_secret(uint8 *integrity_check)
 {
   
@@ -1623,6 +1698,7 @@ uint8 *generate_pph_secret(uint8 *integrity_check)
 
 
 
+// TODO move to enclave
 
 // this checks whether a given secret complies with the pph_secret prototype
 // ([stream][streamhash])
@@ -1655,7 +1731,9 @@ PPH_ERROR check_pph_secret(uint8 *secret, uint8 *secret_integrity)
     
 }
 
-
+// TODO update this so that share XOR happens in enclave
+// in particular our input value *share shouldn't be here since it's share value
+// input should be sharexorhash already computed
 // this function provides a protector entry given the input
 
 pph_entry *create_protector_entry(uint8 *password, unsigned int
@@ -1719,6 +1797,9 @@ pph_entry *create_protector_entry(uint8 *password, unsigned int
   memcpy(entry_node->isolated_check_bits, icb_digest,
           isolated_check_bits);
  
+  // TODO the XOR shouldn't happen where since this mehtod should not have direct access to share value
+  // we must get sharexorhash from enclave and then set it
+
   // xor the whole thing, with the share, we are doing operations in-place
   // to make everything faster
   _xor_share_with_digest(entry_node->sharexorhash, share,
@@ -1731,7 +1812,8 @@ pph_entry *create_protector_entry(uint8 *password, unsigned int
 
 
 
-
+// TODO fix so AES_key is not an argument
+// we should get the encrypted hash from the enclave and use that as input here
 // this other function is the equivalent to the one above, but for
 // shielded accounts.
 
@@ -1796,6 +1878,7 @@ pph_entry *create_shielded_entry(uint8 *password, unsigned int
   memcpy(entry_node->isolated_check_bits, icb_digest,
           isolated_check_bits);
 
+  // TODO this encryption needs to happen in enclave, remove here and take in sharexorhash as argument
   // encrypt the generated digest
   _encrypt_digest(entry_node->sharexorhash, entry_node->sharexorhash,
           AES_key, entry_node->salt);

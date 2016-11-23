@@ -123,43 +123,10 @@ static int pipe_open(char *unique_id, int is_write, int flag_dir)
     return fd;
 }
 
-int pph_context_destroy(int contextId)
-{
-  int retval = 1;
-
-  if(contexts[contextId] == NULL)
-    return retval;
-
-  //Lets free the secret
-  if(contexts[contextId]->secret != NULL)
-  {
-    free(contexts[contextId]->secret);
-    contexts[contextId]->secret = NULL;
-  }
-
-  //dont free AES again, its the same as secret
-
-  //free gfshare context
-  if(contexts[contextId]->share_context != NULL)
-  {
-    gfshare_ctx_free( contexts[contextId]->share_context);
-    contexts[contextId]->share_context=NULL;
-  }
-
-  //free the enclave context
-  free(contexts[contextId]);
-
-  //book keeping update
-  if(current_idx >0)
-    current_idx--;
-  else
-    current_idx=-1;
-
-  retval =0; //success
-  printf("[%s] context [%d] is successfully destroyed  \n",TAG,contextId);
-  return retval; 
-}
-
+/*
+ * at context creation, we need to generate sensitive data (ex: secret) inside the enclave
+ * return 0 for success, -1 for error
+ */
 int pph_context_create(int threshold)
 {
   unsigned char share_numbers[MAX_NUMBER_OF_SHARES];
@@ -205,6 +172,51 @@ int pph_context_create(int threshold)
   return current_idx;
 }
 
+
+/*
+ * at context deletion, we need to free sensitive data inside the enclave
+ * return 0 for success, -1 for error
+ */
+int pph_context_destroy(int contextId)
+{
+  // return -1 for error
+  int retval = -1;
+
+  if(contexts[contextId] == NULL)
+    return retval;
+
+  //Lets free the secret
+  if(contexts[contextId]->secret != NULL)
+  {
+    free(contexts[contextId]->secret);
+    contexts[contextId]->secret = NULL;
+  }
+
+  //dont free AES again, its the same as secret
+
+  //free gfshare context
+  if(contexts[contextId]->share_context != NULL)
+  {
+    gfshare_ctx_free( contexts[contextId]->share_context);
+    contexts[contextId]->share_context=NULL;
+  }
+
+  //free the enclave context
+  free(contexts[contextId]);
+
+  //book keeping update
+  if(current_idx >0)
+    current_idx--;
+  else
+    current_idx=-1;
+
+  retval =0; //success
+  printf("[%s] context [%d] is successfully destroyed  \n",TAG,contextId);
+  return retval;
+}
+
+// this generates a random secret of the form [stream][streamhash], the
+// parameters are the length of each section of the secret
 
 uint8 *generate_pph_secret(uint8 *integrity_check)
 {

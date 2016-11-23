@@ -181,6 +181,7 @@ typedef struct _pph_context{
   // this is a boolean flag to indicate if the secret is available.  
   bool is_normal_operation;             
   
+  // TODO remove this from _pph_context to ensure only enclave has access to secrets?
   // if the context is under normal operation, these will point to the secret
   // and the AES key
   uint8 *AES_key;                
