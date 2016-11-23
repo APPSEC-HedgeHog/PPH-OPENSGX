@@ -1137,8 +1137,6 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
    * d) in pph, we are now in normal operation so move out of bootstrap mode
    * e) update bootstrap accounts: we need to send stored hash (this is only hash of salted password
    *    since we didn't have the secret before while we were making/verifying bootstrap accounts) into enclave
-   *    for protector entries: take the XOR of that hash with the share (calculate share value inside enclave)
-   *      and send share XOR hash back to pph to be stored with user account
    *    for shielded entries: encrypt salted hash with AES_key and send that back to pph to be stored with user account
    */
 
@@ -1175,7 +1173,8 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
                                                SHARE_LENGTH);
   }
   
-  // TODO part b: AES_key is same as secret, we set secret in gfshare_ctx_enc_setsecret which RESCRAMBLES coefficients
+  // TODO part b: AES_key is same as secret, we set secret in gfshare_ctx_enc_setsecret
+  // santiago recommended we use a different version
   // we have an initialized share context, we set the recombined secret to the
   // context's secret and set the flag to one so it is ready to use.
   gfshare_ctx_enc_setsecret(ctx->share_context, ctx->secret);
@@ -1184,7 +1183,6 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
   ctx->is_normal_operation = true;
   ctx->AES_key = ctx->secret;
 
-  // TODO part e: encrypting the bootstrap accounts with the PPH method
   /* update the bootstrap accounts */
   bootstrap_update_entry = ctx->bootstrap_entries;
   while(bootstrap_update_entry != NULL) {
@@ -1199,6 +1197,8 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
     }
     memcpy(entry->isolated_check_bits, icb_digest_buffer, ctx->isolated_check_bits);
 
+    // TODO part e: encrypting the bootstrap accounts with the PPH method
+    // move this operation into enclave and send back hash encrypted with AES_key for storage
     /* encrypt the original entry */
     _encrypt_digest(entry->sharexorhash, entry->sharexorhash, ctx->AES_key, entry->salt);
 
@@ -1221,10 +1221,12 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
 
     if (this_login->entry->share_number == SHIELDED_ACCOUNT) {
 
+    	// TODO encryption with AES key should be moved into enclave
       _encrypt_digest(estimated_digest, this_login->digest, ctx->AES_key, this_login->entry->salt);
 
     } else {
 
+    	// TODO calculation of share and resulting XOR should be moved into enclave
       gfshare_ctx_enc_getshare(ctx->share_context, 
               (uint8)this_login->entry->share_number, estimated_share);
       _xor_share_with_digest(estimated_digest, this_login->digest, estimated_share,
