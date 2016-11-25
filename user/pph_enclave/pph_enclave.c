@@ -275,14 +275,10 @@ int pph_create_account(int contextId, uint8 * sharedxorhash, int isProtected)
   {
     uint8 salted_hash[DIGEST_LENGTH];
     uint8 salt[MAX_SALT_LENGTH];
-    printf("going to read salt \n");
     read(fd_ae, salt, sizeof(uint8)*MAX_SALT_LENGTH);//read the salt
-    printf("read salt \n");
     read(fd_ae, salted_hash, sizeof(uint8)*DIGEST_LENGTH);//read the salted hash
-    printf("read salted hash \n");
     _encrypt_digest(sharedxorhash, salted_hash,
           contexts[contextId]->AES, salt);
-    printf("encrypt digest done \n");
   }
   return retval;
 }
@@ -324,7 +320,6 @@ void handle_pph_request(char * command, int len)
     read(fd_ae, &context_id, sizeof(context_id));
     uint8 sharedxorhash[DIGEST_LENGTH];
     int success_msg = pph_create_account(context_id, sharedxorhash, 0);
-    printf("enclave : create acc returned \n");
     write(fd_ea, &success_msg, sizeof(int));
     if(success_msg == 0)
       write(fd_ea, sharedxorhash, sizeof(uint8) * DIGEST_LENGTH);

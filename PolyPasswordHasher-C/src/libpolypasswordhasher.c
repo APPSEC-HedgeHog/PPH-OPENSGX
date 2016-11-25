@@ -609,9 +609,7 @@ PPH_ERROR pph_create_account(pph_context *ctx, const uint8 *username,
           salt_buffer, MAX_SALT_LENGTH, ctx->AES_key, DIGEST_LENGTH,
           ctx->isolated_check_bits);
       /*opensgx segment*/
-      printf("calling shielded hash \n");
-      obtain_shielded_hash(ctx, entry_node, &(entry_node->sharexorhash), &(entry_node->sharexorhash));
-      printf("shielded hash returned \n");
+      obtain_shielded_hash(ctx, entry_node, entry_node->sharexorhash, entry_node->sharexorhash);
       /*opensgx segment*/
     }
 
@@ -1849,7 +1847,8 @@ pph_entry *create_shielded_entry(uint8 *password, unsigned int
   unsigned int i;
 
   // check everything makes sense, nothing should point to null
-  if(password == NULL || salt == NULL || AES_key == NULL){
+  //RAHUL : commented this
+  if(password == NULL || salt == NULL /*|| AES_key == NULL*/){
     
     return NULL;
     
@@ -1967,7 +1966,6 @@ pph_entry *create_bootstrap_entry(uint8 *password, unsigned int password_length,
 
 int obtain_shielded_hash(pph_context *ctx, pph_entry *entry_node, uint8 *digest, uint8 *sharexorhash)
 {
-  printf("obtain_shielded_hash start\n");
   /*TEST-OPENSGX-SEGMENT*/
   if(initializePipe("TO_ENCLAVE", "TO_HOST") == 1){
     printf("LibPPH: ERROR CREATING PIPE \n");
@@ -1976,15 +1974,11 @@ int obtain_shielded_hash(pph_context *ctx, pph_entry *entry_node, uint8 *digest,
   
   // opensgx: enclave command PROTECTED_HASH
   int len = strlen(SHIELDED_HASH);
-
   write_to_enclave(&len, sizeof(int));
   write_to_enclave(SHIELDED_HASH,strlen(SHIELDED_HASH)+1);
   write_to_enclave(&(ctx->pph_ctx_id),sizeof(unsigned int)); //write the context id
-  printf("ctx id written \n");
-  write_to_enclave(&(entry_node->salt),sizeof(uint8)*MAX_SALT_LENGTH); //write the salt
-  printf("salt written \n");
+  write_to_enclave(entry_node->salt,sizeof(uint8)*MAX_SALT_LENGTH); //write the salt
   write_to_enclave(digest,sizeof(uint8)*DIGEST_LENGTH); //write the saltedhash
-  printf("digest written \n");
   /*TEST-OPENSGX-SEGMENT*/
   //First lets read error code, if its ok only then read the resultant sharexorhash
   int ret_val =PPH_ERROR_OK;
@@ -1994,7 +1988,6 @@ int obtain_shielded_hash(pph_context *ctx, pph_entry *entry_node, uint8 *digest,
 
   //Read the resultant sharexorhash into the struct member
   read_from_enclave(sharexorhash,sizeof(uint8)*DIGEST_LENGTH);
-  printf("obtain_shielded_hash end\n");
   return ret_val;
 }
 

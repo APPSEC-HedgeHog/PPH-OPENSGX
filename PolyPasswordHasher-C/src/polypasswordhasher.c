@@ -32,8 +32,8 @@ int main(void)
   // when creating a user with no shares, we get a *shielded* account. 
   // Shielded accounts have their hash encrypted and are unable to 
   // recover shares and thus cannot help to transition to normal operation. 
-  //pph_create_account(context,"Eve", strlen("Eve"),
-                                  //"i'm.all.ears", strlen("i'm.all.ears"), 0);
+  pph_create_account(context,"Eve", strlen("Eve"),
+                                  "i'm.all.ears", strlen("i'm.all.ears"), 0);
   // to fully check a login we must have a bootstrapped context, we send the
   // credentials and receive an error in return
   if(pph_check_login(context, "Alice", strlen("Alice"), "I.love.bob",
