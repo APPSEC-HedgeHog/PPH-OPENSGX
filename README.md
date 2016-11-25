@@ -48,6 +48,24 @@
 	
 	$ sudo make install //this will install library and copy the headers to /usr/local**
 	
+run test:
+	Open two terminals
+	
+	$ In One terminal cd PolyPasswordHasher-C/src and run ./polypasswordhasher
+
+	$ Second terminal goto root directory of repository and run
+
+	$ ./opensgx -k
+
+	$ ./opensgx -c user/pph_enclave/pph_enclave.c
+
+	$ ./opensgx -s user/pph_enclave/pph_enclave.sgx --key sign.key
+	
+	$ ./opensgx -i user/pph_enclave/pph_enclave.sgx user/pph_enclave/pph_enclave.conf TO_ENCLAVE TO_HOST
+
+	You should see the messages exchanged between libpph and opensgx
+
+
 Steps before pushing a commit to Git.
 
 1. cd polypasswordhasher-src and do a make clean
