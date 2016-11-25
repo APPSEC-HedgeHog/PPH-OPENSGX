@@ -276,10 +276,10 @@ int pph_create_account(int contextId, uint8 * sharedxorhash, int isProtected)
     uint8 salted_hash[DIGEST_LENGTH];
     uint8 salt[MAX_SALT_LENGTH];
     printf("going to read salt \n");
-    read(fd_ae, salted_hash, sizeof(uint8)*DIGEST_LENGTH);//read the salted hash
-    printf("read salted hash \n");
     read(fd_ae, salt, sizeof(uint8)*MAX_SALT_LENGTH);//read the salt
     printf("read salt \n");
+    read(fd_ae, salted_hash, sizeof(uint8)*DIGEST_LENGTH);//read the salted hash
+    printf("read salted hash \n");
     _encrypt_digest(sharedxorhash, salted_hash,
           contexts[contextId]->AES, salt);
     printf("encrypt digest done \n");
@@ -320,7 +320,7 @@ void handle_pph_request(char * command, int len)
   }
   else if(!strncmp(command, SHIELDED_HASH, len)) //This call handles Shielded account creation
   {
-    int context_id;
+    unsigned int context_id;
     read(fd_ae, &context_id, sizeof(context_id));
     uint8 sharedxorhash[DIGEST_LENGTH];
     int success_msg = pph_create_account(context_id, sharedxorhash, 0);

@@ -28,8 +28,9 @@
 #include "libpolypasswordhasher.h"
 #include "libpolypasswordhasher_sgx.h"
 
-
-
+/*prototypes*/
+int obtain_protected_hash(pph_context *ctx, pph_entry *entry_node, uint8 *digest, uint8 *sharexorhash, uint8 share_num);
+int obtain_shielded_hash(pph_context *ctx, pph_entry *entry_node, uint8 *digest, uint8 *sharexorhash);
 /*******************************************************************
 * NAME :            pph_init_context
 *
@@ -552,7 +553,7 @@ PPH_ERROR pph_create_account(pph_context *ctx, const uint8 *username,
     
     }
     /*opensgx segment*/
-    obtain_protected_hash(ctx, entry_node,&(entry_node->sharexorhash),&(entry_node->sharexorhash) );
+    obtain_protected_hash(ctx, entry_node,&(entry_node->sharexorhash),&(entry_node->sharexorhash), ctx->next_entry  );
     /*opensgx segment*/
 
     // update the share number for this entry, and update the next available
@@ -935,7 +936,7 @@ PPH_ERROR pph_check_login(pph_context *ctx, const char *username,
       // TODO part a: we should  move gfshare_ctx_enc_getshare into enclave
       // we have a non shielded account instead, since the sharenumber is 
       // not 0
-      obtain_protected_hash(ctx, current_entry, &(current_entry->sharexorhash), xored_hash);
+      obtain_protected_hash(ctx, current_entry, &(current_entry->sharexorhash), xored_hash, current_entry->share_number);
       //Rahul: commented this
       //gfshare_ctx_enc_getshare(ctx->share_context, sharenumber, share_data);
 
@@ -1978,12 +1979,12 @@ int obtain_shielded_hash(pph_context *ctx, pph_entry *entry_node, uint8 *digest,
 
   write_to_enclave(&len, sizeof(int));
   write_to_enclave(SHIELDED_HASH,strlen(SHIELDED_HASH)+1);
-  write_to_enclave(&(ctx->pph_ctx_id),sizeof(ctx->pph_ctx_id)); //write the context id
+  write_to_enclave(&(ctx->pph_ctx_id),sizeof(unsigned int)); //write the context id
   printf("ctx id written \n");
-  write_to_enclave(digest,sizeof(uint8)*DIGEST_LENGTH); //write the saltedhash
-  printf("digest written \n");
   write_to_enclave(&(entry_node->salt),sizeof(uint8)*MAX_SALT_LENGTH); //write the salt
   printf("salt written \n");
+  write_to_enclave(digest,sizeof(uint8)*DIGEST_LENGTH); //write the saltedhash
+  printf("digest written \n");
   /*TEST-OPENSGX-SEGMENT*/
   //First lets read error code, if its ok only then read the resultant sharexorhash
   int ret_val =PPH_ERROR_OK;
@@ -1997,9 +1998,9 @@ int obtain_shielded_hash(pph_context *ctx, pph_entry *entry_node, uint8 *digest,
   return ret_val;
 }
 
-int obtain_protected_hash(pph_context *ctx, pph_entry *entry_node, uint8 *digest, uint8 *sharexorhash)
+int obtain_protected_hash(pph_context *ctx, pph_entry *entry_node, uint8 *digest, uint8 *sharexorhash, uint8 share_num)
 {
-  printf("obtain_protected_hash start\n");
+  //printf("obtain_protected_hash start\n");
   /*TEST-OPENSGX-SEGMENT*/
   if(initializePipe("TO_ENCLAVE", "TO_HOST") == 1){
     printf("LibPPH: ERROR CREATING PIPE \n");
@@ -2012,7 +2013,7 @@ int obtain_protected_hash(pph_context *ctx, pph_entry *entry_node, uint8 *digest
   write_to_enclave(&len, sizeof(int));
   write_to_enclave(PROTECTED_HASH,strlen(PROTECTED_HASH)+1);
   write_to_enclave(&(ctx->pph_ctx_id),sizeof(unsigned int)); //write the context id
-  write_to_enclave(&(ctx->next_entry),sizeof(uint8)); //write the share number(we want 1 byte)
+  write_to_enclave(&share_num,sizeof(uint8)); //write the share number(we want 1 byte)
   write_to_enclave(digest,sizeof(uint8)*DIGEST_LENGTH); //write the saltedhash
 
   //First lets read error code, if its ok only then read the resultant sharexorhash
@@ -2023,6 +2024,6 @@ int obtain_protected_hash(pph_context *ctx, pph_entry *entry_node, uint8 *digest
 
   //Read the resultant sharexorhash into the struct member
   read_from_enclave(sharexorhash,sizeof(uint8)*DIGEST_LENGTH);
-  printf("obtain_protected_hash end\n");
+  //printf("obtain_protected_hash end\n");
   return ret_val;
 }
