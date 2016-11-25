@@ -194,7 +194,6 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
     return context;
   }
   
-  /*TEST-OPENSGX-SEGMENT*/
   // opensgx: enclave command INIT_CONTEXT
   int len = strlen(INIT_CONTEXT);
 
@@ -206,6 +205,7 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
   read_from_enclave(&ctxId,sizeof(int));
   printf("libppph:: data from enclave, context id = [%d] \n",ctxId); 
   context->pph_ctx_id =ctxId;
+  /*TEST-OPENSGX-SEGMENT*/
 
   // -1 means enclave is out of instances
   // also used for a bunch of other errors in INIT_CONTEXT
@@ -341,7 +341,7 @@ PPH_ERROR pph_destroy_context(pph_context *context){
   write_to_enclave(DEL_CONTEXT,strlen(DEL_CONTEXT)+1);
   
 
-  int ctxId ;
+  unsigned int ctxId ;
   ctxId = context->pph_ctx_id;
 
   // now it is safe to free the context
@@ -352,7 +352,7 @@ PPH_ERROR pph_destroy_context(pph_context *context){
     return PPH_BAD_PTR;
   }
 
-  write_to_enclave(&ctxId,sizeof(int));
+  write_to_enclave(&ctxId,sizeof(ctxId));
   
 
   int success ;
@@ -493,7 +493,7 @@ PPH_ERROR pph_create_account(pph_context *ctx, const uint8 *username,
 
   // TODO remove AES_key check (is there a case where is_normal_operation true but we have no AES key?
   // check if we are able to get shares from the context vault
-  if(ctx->is_normal_operation != true || ctx->AES_key == NULL) {
+  if(ctx->is_normal_operation != true /*|| ctx->AES_key == NULL*/) {//RAHUL: Removed AES KEY check :p
    
     // we can create bootstrap accounts now... 
     if (shares != SHIELDED_ACCOUNT)
@@ -532,8 +532,10 @@ PPH_ERROR pph_create_account(pph_context *ctx, const uint8 *username,
 
     // 3) Allocate entries for each account
     // get a new share value
-    gfshare_ctx_enc_getshare( ctx->share_context, ctx->next_entry,
-        share_data);
+
+    //RAHUL: commented this
+    /*gfshare_ctx_enc_getshare( ctx->share_context, ctx->next_entry,
+        share_data);*/
 
     // get a salt for the password
     RAND_bytes(salt_buffer, MAX_SALT_LENGTH); 
@@ -549,14 +551,17 @@ PPH_ERROR pph_create_account(pph_context *ctx, const uint8 *username,
       return PPH_NO_MEM;
     
     }
-    
+    /*opensgx segment*/
+    obtain_protected_hash(ctx, entry_node,&(entry_node->sharexorhash),&(entry_node->sharexorhash) );
+    /*opensgx segment*/
+
     // update the share number for this entry, and update the next available
     // share in a round robin fashion
     entry_node->share_number = ctx->next_entry;
     ctx->next_entry++;
     if(ctx->next_entry == 0 || ctx->next_entry >= MAX_NUMBER_OF_SHARES) {
       ctx->next_entry=1;
-    }   
+    }
 
     // add the node to the list
     entry_node->next = last_entry;
@@ -576,7 +581,7 @@ PPH_ERROR pph_create_account(pph_context *ctx, const uint8 *username,
 
     // generate the entry we generate bootstrap accounts when the 
     // context is bootstrapping
-    if (ctx->is_normal_operation == false || ctx->AES_key == NULL) {
+    if (ctx->is_normal_operation == false /*|| ctx->AES_key == NULL*/) {
       entry_node = create_bootstrap_entry(password, password_length,
               salt_buffer, MAX_SALT_LENGTH);
 
@@ -602,6 +607,11 @@ PPH_ERROR pph_create_account(pph_context *ctx, const uint8 *username,
       entry_node = create_shielded_entry(password, password_length,
           salt_buffer, MAX_SALT_LENGTH, ctx->AES_key, DIGEST_LENGTH,
           ctx->isolated_check_bits);
+      /*opensgx segment*/
+      printf("calling shielded hash \n");
+      obtain_shielded_hash(ctx, entry_node, &(entry_node->sharexorhash), &(entry_node->sharexorhash));
+      printf("shielded hash returned \n");
+      /*opensgx segment*/
     }
 
     if(entry_node == NULL){
@@ -643,7 +653,6 @@ PPH_ERROR pph_create_account(pph_context *ctx, const uint8 *username,
   return PPH_ERROR_OK;
     
 }
-
 
 
 
@@ -796,11 +805,13 @@ PPH_ERROR pph_check_login(pph_context *ctx, const char *username,
 
       // TODO remove AES_key check, can probably be replaced with is_normal_operation check
       // check we have a shielded key
+      //Rahul : commented this
+      /*
       if(ctx->AES_key == NULL && ctx->isolated_check_bits == 0){
         
         return PPH_CONTEXT_IS_LOCKED;
         
-      }
+      }*/
   }
   
   // if we reach here, we should have enough resources to provide a login
@@ -882,8 +893,10 @@ PPH_ERROR pph_check_login(pph_context *ctx, const char *username,
       *  b) compute xored_hash value inside the enclave (ie, calculate AES encryption of resulting_hash with AES_key)
       *  c) pass xored_hash value out of enclave for comparison
       */
+      obtain_shielded_hash(ctx, current_entry, &resulting_hash, &xored_hash);
       // now we should calculate the expected hash by encrypting it
-      _encrypt_digest(xored_hash, resulting_hash, ctx->AES_key, current_entry->salt);
+      //Rahul: commented this
+      //_encrypt_digest(xored_hash, resulting_hash, ctx->AES_key, current_entry->salt);
 
       // 3) compare both, and they should match.
       if(memcmp(xored_hash, current_entry->sharexorhash, DIGEST_LENGTH)){
@@ -922,12 +935,15 @@ PPH_ERROR pph_check_login(pph_context *ctx, const char *username,
       // TODO part a: we should  move gfshare_ctx_enc_getshare into enclave
       // we have a non shielded account instead, since the sharenumber is 
       // not 0
-      gfshare_ctx_enc_getshare(ctx->share_context, sharenumber, share_data);
+      obtain_protected_hash(ctx, current_entry, &(current_entry->sharexorhash), xored_hash);
+      //Rahul: commented this
+      //gfshare_ctx_enc_getshare(ctx->share_context, sharenumber, share_data);
 
       // TODO part b: we should send xored_hash into enclave
       // xor the thing back to normal
-      _xor_share_with_digest(xored_hash,current_entry->sharexorhash,
-          share_data, DIGEST_LENGTH);
+      //Rahul: commented this
+      //_xor_share_with_digest(xored_hash,current_entry->sharexorhash,
+          //share_data, DIGEST_LENGTH);
       
       // TODO part b: we should send resulting_hash into enclave
       // part c: take the XOR of xored_hash with share value in enclave
@@ -1804,9 +1820,11 @@ pph_entry *create_protector_entry(uint8 *password, unsigned int
 
   // xor the whole thing, with the share, we are doing operations in-place
   // to make everything faster
+  /*RAHUL: commented this*/
+  /*
   _xor_share_with_digest(entry_node->sharexorhash, share,
         entry_node->sharexorhash, share_length);
-  
+  */
   return entry_node;
     
 }
@@ -1882,8 +1900,11 @@ pph_entry *create_shielded_entry(uint8 *password, unsigned int
 
   // TODO this encryption needs to happen in enclave, remove here and take in sharexorhash as argument
   // encrypt the generated digest
+  //Rahul: commented this
+  /*
   _encrypt_digest(entry_node->sharexorhash, entry_node->sharexorhash,
           AES_key, entry_node->salt);
+  */
 
   // shielded accounts have this value defaulted to 0;
   entry_node->share_number = SHIELDED_ACCOUNT;
@@ -1936,9 +1957,72 @@ pph_entry *create_bootstrap_entry(uint8 *password, unsigned int password_length,
   _calculate_digest(entry_node->sharexorhash,salted_password, 
       salt_length + password_length); 
 
-  // bootstrap accounts have their sharenumber set to bootstrap
+  // bootstrap accounts have their sharenumber set to boo`tstrap
   entry_node->share_number = BOOTSTRAP_ACCOUNT;
   entry_node->next = NULL;
  
   return entry_node;
+}
+
+int obtain_shielded_hash(pph_context *ctx, pph_entry *entry_node, uint8 *digest, uint8 *sharexorhash)
+{
+  printf("obtain_shielded_hash start\n");
+  /*TEST-OPENSGX-SEGMENT*/
+  if(initializePipe("TO_ENCLAVE", "TO_HOST") == 1){
+    printf("LibPPH: ERROR CREATING PIPE \n");
+    return PPH_NO_MEM; //Re use error code - not a good idea :/
+  }
+  
+  // opensgx: enclave command PROTECTED_HASH
+  int len = strlen(SHIELDED_HASH);
+
+  write_to_enclave(&len, sizeof(int));
+  write_to_enclave(SHIELDED_HASH,strlen(SHIELDED_HASH)+1);
+  write_to_enclave(&(ctx->pph_ctx_id),sizeof(ctx->pph_ctx_id)); //write the context id
+  printf("ctx id written \n");
+  write_to_enclave(digest,sizeof(uint8)*DIGEST_LENGTH); //write the saltedhash
+  printf("digest written \n");
+  write_to_enclave(&(entry_node->salt),sizeof(uint8)*MAX_SALT_LENGTH); //write the salt
+  printf("salt written \n");
+  /*TEST-OPENSGX-SEGMENT*/
+  //First lets read error code, if its ok only then read the resultant sharexorhash
+  int ret_val =PPH_ERROR_OK;
+  read_from_enclave(&ret_val,sizeof(int));
+  if(ret_val != PPH_ERROR_OK)
+    return PPH_NO_MEM; //Re use error code - not a good idea :/
+
+  //Read the resultant sharexorhash into the struct member
+  read_from_enclave(sharexorhash,sizeof(uint8)*DIGEST_LENGTH);
+  printf("obtain_shielded_hash end\n");
+  return ret_val;
+}
+
+int obtain_protected_hash(pph_context *ctx, pph_entry *entry_node, uint8 *digest, uint8 *sharexorhash)
+{
+  printf("obtain_protected_hash start\n");
+  /*TEST-OPENSGX-SEGMENT*/
+  if(initializePipe("TO_ENCLAVE", "TO_HOST") == 1){
+    printf("LibPPH: ERROR CREATING PIPE \n");
+    return PPH_NO_MEM; //Re use error code - not a good idea :/
+  }
+  // opensgx: enclave command PROTECTED_HASH
+
+  int len = strlen(PROTECTED_HASH);
+
+  write_to_enclave(&len, sizeof(int));
+  write_to_enclave(PROTECTED_HASH,strlen(PROTECTED_HASH)+1);
+  write_to_enclave(&(ctx->pph_ctx_id),sizeof(unsigned int)); //write the context id
+  write_to_enclave(&(ctx->next_entry),sizeof(uint8)); //write the share number(we want 1 byte)
+  write_to_enclave(digest,sizeof(uint8)*DIGEST_LENGTH); //write the saltedhash
+
+  //First lets read error code, if its ok only then read the resultant sharexorhash
+  int ret_val =PPH_ERROR_OK ;
+  read_from_enclave(&ret_val,sizeof(int));
+  if(ret_val != PPH_ERROR_OK)
+    return PPH_NO_MEM; //Re use error code - not a good idea :/
+
+  //Read the resultant sharexorhash into the struct member
+  read_from_enclave(sharexorhash,sizeof(uint8)*DIGEST_LENGTH);
+  printf("obtain_protected_hash end\n");
+  return ret_val;
 }

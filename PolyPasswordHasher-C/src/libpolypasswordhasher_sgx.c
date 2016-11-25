@@ -140,3 +140,7 @@ void close_pipes()
     close(fd_ea);
     init_done=0;
 }
+
+unsigned int getAE(){ return fd_ae;}
+
+unsigned int getEA(){ return fd_ea;}
