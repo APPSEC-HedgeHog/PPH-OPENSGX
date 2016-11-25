@@ -21,12 +21,6 @@ int main(void)
   // setup the context, this will generate us the shares, setup information 
   // needed to operate and initialize all of the data structures.
   context = pph_init_context(threshold, isolated_check_bits);
-  pph_destroy_context(context);
-  return 0; 
-  //WORK IN PROGRESS - works till here
-  //Cause init_context and destroy context
-  //works for now but with this implementation nothing below will work
-  //Test by removing the return
 
   // add some users, we send the context, a username, a password and a number
   // of shares to assign to the user. The a user can have many shares, and count
@@ -35,7 +29,26 @@ int main(void)
                                        "I.love.bob", strlen("I.love.bob"), 1);
   pph_create_account(context, "Bob", strlen("Bob"),
                        "i.secretly.love.eve",strlen("i.secretly.love.eve"),1);
-  
+  // when creating a user with no shares, we get a *shielded* account. 
+  // Shielded accounts have their hash encrypted and are unable to 
+  // recover shares and thus cannot help to transition to normal operation. 
+  pph_create_account(context,"Eve", strlen("Eve"),
+                                  "i'm.all.ears", strlen("i'm.all.ears"), 0);
+  // to fully check a login we must have a bootstrapped context, we send the
+  // credentials and receive an error in return
+  if(pph_check_login(context, "Alice", strlen("Alice"), "I.love.bob",
+         strlen("I.love.bob")) == PPH_ERROR_OK){
+    printf("welcome alice\n");
+  }else{
+    printf("generic error message\n");
+  }
+  pph_destroy_context(context);
+  return 0; 
+  //WORK IN PROGRESS - works till here
+  //Cause init_context and destroy context
+  //works for now but with this implementation nothing below will work
+  //Test by removing the return
+
   // when creating a user with no shares, we get a *shielded* account. 
   // Shielded accounts have their hash encrypted and are unable to 
   // recover shares and thus cannot help to transition to normal operation. 

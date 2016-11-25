@@ -21,8 +21,9 @@
 #define SHARE_LENGTH 256/8 
 #define DIGEST_LENGTH SHARE_LENGTH
 #define SIGNATURE_HASH_ITERATIONS 10000
+#define MAX_SALT_LENGTH 16  
 
-#define uint8 char
+#define uint8 unsigned char
 /*INCLUDE SGX-MALLOC Insted of stdlib malloc*/
 #define XMALLOC malloc
 #define XFREE free
@@ -253,6 +254,35 @@ uint8 *generate_pph_secret(uint8 *integrity_check)
     
 }
 
+// isProtected is 1 or 0
+int pph_create_account(int contextId, uint8 * sharedxorhash, int isProtected)
+{
+  int retval=0;
+  printf("cont id [%d] , isProtected [%d] \n",contextId, isProtected);
+  if(isProtected)
+  {
+    uint8 share_num;
+    uint8 digest[DIGEST_LENGTH];
+    uint8 share_data[SHARE_LENGTH];
+    read(fd_ae, &share_num, sizeof(uint8)); //read share number
+    //printf("\n share num is [%d] \n",share_num);
+    read(fd_ae, digest, sizeof(uint8)*DIGEST_LENGTH);//read the salted hash
+    gfshare_ctx_enc_getshare( contexts[contextId]->share_context, share_num,
+        share_data);
+    _xor_share_with_digest(sharedxorhash, digest, share_data, SHARE_LENGTH);
+  }
+  else
+  {
+    uint8 salted_hash[DIGEST_LENGTH];
+    uint8 salt[MAX_SALT_LENGTH];
+    read(fd_ae, salt, sizeof(uint8)*MAX_SALT_LENGTH);//read the salt
+    read(fd_ae, salted_hash, sizeof(uint8)*DIGEST_LENGTH);//read the salted hash
+    _encrypt_digest(sharedxorhash, salted_hash,
+          contexts[contextId]->AES, salt);
+  }
+  return retval;
+}
+
 //Add for all API calls
 void handle_pph_request(char * command, int len)
 {
@@ -269,10 +299,30 @@ void handle_pph_request(char * command, int len)
   }
   else if(!strncmp(command, DEL_CONTEXT, len)) //This call handles Delete context
   {
-    int context_id;
+    unsigned int context_id;
     read(fd_ae, &context_id, sizeof(context_id));
     int success_msg = pph_context_destroy(context_id);
     write(fd_ea, &success_msg, sizeof(int));
+  }
+  else if(!strncmp(command, PROTECTED_HASH, len)) //This call handles Protected account creation
+  {
+    unsigned int context_id;
+    read(fd_ae, &context_id, sizeof(context_id));
+    uint8 sharedxorhash[DIGEST_LENGTH];
+    int success_msg = pph_create_account(context_id, sharedxorhash, 1);
+    write(fd_ea, &success_msg, sizeof(int));
+    if(success_msg == 0)
+      write(fd_ea, sharedxorhash, sizeof(uint8) * DIGEST_LENGTH);
+  }
+  else if(!strncmp(command, SHIELDED_HASH, len)) //This call handles Shielded account creation
+  {
+    unsigned int context_id;
+    read(fd_ae, &context_id, sizeof(context_id));
+    uint8 sharedxorhash[DIGEST_LENGTH];
+    int success_msg = pph_create_account(context_id, sharedxorhash, 0);
+    write(fd_ea, &success_msg, sizeof(int));
+    if(success_msg == 0)
+      write(fd_ea, sharedxorhash, sizeof(uint8) * DIGEST_LENGTH);
   }
 }
 
@@ -548,6 +598,38 @@ void _calculate_digest(uint8 *digest, const uint8 *password,
 
   return;
 
+}
+
+// xoring two streams of bytes. 
+void _xor_share_with_digest(uint8 *result, uint8 *share,
+     uint8 * digest,unsigned int length) {
+  int i;
+  unsigned int *xor_digest_pointer;
+  unsigned int *xor_share_pointer;
+  unsigned int *xor_result_pointer;
+  int aligned_length = length/sizeof(*xor_result_pointer);
+  int char_aligned_length = aligned_length * sizeof(*xor_result_pointer);
+  int char_aligned_offset = length%sizeof(*xor_result_pointer);
+
+  // xor the whole thing, we do this in an unsigned int fashion imagining 
+  // this is where usually where the processor aligns things and is, hence
+  // faster
+  xor_digest_pointer = (unsigned int*)digest;
+  xor_share_pointer = (unsigned int*)share;
+  xor_result_pointer = (unsigned int*)result;
+  
+  for(i=0;i<aligned_length;i++) {
+      *(xor_result_pointer + i) = 
+        *(xor_share_pointer+i)^*(xor_digest_pointer +i);
+  }
+  
+  // xor the rest, if we have a number that's not divisible by a word.
+  for(i = char_aligned_length; i<char_aligned_length+char_aligned_offset;i++) {
+    *(result+i) = *(share+i) ^ *(digest+i); 
+  }
+    
+  return;// :/
+    
 }
 
 void _encrypt_digest(uint8 *result, uint8 *digest, uint8 *AES_key, uint8* iv) {
