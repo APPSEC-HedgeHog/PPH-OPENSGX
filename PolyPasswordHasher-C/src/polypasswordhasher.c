@@ -42,8 +42,8 @@ int main(void)
   }else{
     printf("generic error message\n");
   }
-  pph_destroy_context(context);
-  return 0; 
+  //pph_destroy_context(context);
+  //return 0; 
   //WORK IN PROGRESS - works till here
   //Cause init_context and destroy context
   //works for now but with this implementation nothing below will work
@@ -135,7 +135,7 @@ int main(void)
   }else{
     printf("you are not carl");
   }
-  
+  return 0;
   
   // we should now store the context and free the data before leaving
   pph_store_context(context,"securepasswords");
