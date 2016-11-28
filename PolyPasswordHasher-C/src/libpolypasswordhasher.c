@@ -201,11 +201,14 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
   write_to_enclave(&len, sizeof(int));
   write_to_enclave(INIT_CONTEXT,strlen(INIT_CONTEXT)+1);
   write_to_enclave(&threshold,sizeof(int));
-
+  //Read Integrity
+  read_from_enclave(context->secret_integrity,sizeof(uint8)*DIGEST_LENGTH);
+  
   int ctxId ;
   read_from_enclave(&ctxId,sizeof(int));
   printf("libppph:: data from enclave, context id = [%d] \n",ctxId); 
   context->pph_ctx_id =ctxId;
+
   /*TEST-OPENSGX-SEGMENT*/
 
   // -1 means enclave is out of instances
@@ -1066,7 +1069,7 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
   struct _reload_data
   {
       int sentinelSize; // for head it will contain the size and for rest its -1
-      uint8 * digest; //dont create memory just copy the pointer [DIGEST_LENGTH]
+      uint8  digest[DIGEST_LENGTH]; //dont create memory just copy the pointer [DIGEST_LENGTH]
       uint8 shareNum;
       uint8 * shareXorHash; //dont create memory just copy the pointer [DIGEST_LENGTH]
       struct _reload_data *next;
@@ -1142,12 +1145,12 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
             memcpy(salted_password,entry->salt,entry->salt_length);
             memcpy(salted_password+entry->salt_length, passwords[i],
                 password_lengths[i]);
-            _calculate_digest(estimated_digest,salted_password,
+            _calculate_digest(rel_data->digest,salted_password,
              entry->salt_length + password_lengths[i]);
 
             rel_data->shareXorHash = entry->sharexorhash;
             rel_data->sentinelSize = -1;
-            rel_data->digest =  estimated_digest;
+            //rel_data->digest =  estimated_digest;
             rel_data->shareNum =  entry->share_number;
             rel_data->next= NULL;
             // TODO part c
@@ -1203,13 +1206,13 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
     write_to_enclave(&len, sizeof(int));
     write_to_enclave(UNLOCK_PASSWD_DB,strlen(UNLOCK_PASSWD_DB)+1);
     write_to_enclave(&(ctx->pph_ctx_id),sizeof(int)); //write the context id
+    write_to_enclave(&(ctx->secret_integrity), sizeof(uint8) * DIGEST_LENGTH);
     write_to_enclave(&cnt, sizeof(int));
-    printf(" num users [%d] \n", cnt);
+
     for(idx=0; idx<cnt; idx++)//for each user
     {
       reload_data *head_data= (reload_data *)reload_users[idx];
       write_to_enclave(&(head_data->sentinelSize), sizeof(int));
-      printf(" num entries [%d] \n", head_data->sentinelSize);
       reload_data * temp = head_data;
       head_data = head_data->next;
       free(temp);
@@ -1218,7 +1221,6 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
         write_to_enclave(head_data->shareXorHash, sizeof(uint8)*DIGEST_LENGTH);
         write_to_enclave(head_data->digest, sizeof(uint8)*DIGEST_LENGTH);
         write_to_enclave(&(head_data->shareNum), sizeof(uint8));
-        printf("share num [%d] \n",head_data->shareNum);
         reload_data *temp = head_data;
         head_data=head_data->next;
         free(temp);

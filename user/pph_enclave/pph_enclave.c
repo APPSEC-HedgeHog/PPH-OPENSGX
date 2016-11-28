@@ -168,7 +168,7 @@ int pph_context_create(int threshold)
   }
 
   gfshare_ctx_enc_setsecret(contexts[current_idx]->share_context, contexts[current_idx]->secret);
-
+  write(fd_ea, contexts[current_idx]->secret_integrity, sizeof(uint8)*DIGEST_LENGTH);
   printf("[%s] context is created [%d] \n",TAG,current_idx);
   return current_idx;
 }
@@ -321,7 +321,8 @@ int pph_unlock_password_data(int ctxId)
   uint8 estimated_share[SHARE_LENGTH];
   enclave_context * ctx = contexts[ctxId];
   uint8 secret[SHARE_LENGTH];
-
+  uint8 estimated_digest[DIGEST_LENGTH];
+  
   //initialize the share numbers
   for(idx=0;idx<MAX_NUMBER_OF_SHARES;idx++){
    share_numbers[idx] = 0;
@@ -329,25 +330,21 @@ int pph_unlock_password_data(int ctxId)
   //initialize a recombination context
   G = gfshare_ctx_init_dec( share_numbers, MAX_NUMBER_OF_SHARES-1, SHARE_LENGTH);
 
-
+  read(fd_ae, ctx->secret_integrity, sizeof(uint8) * DIGEST_LENGTH);
   read(fd_ae, &num_users, sizeof(num_users)); //read num users
-  printf(" num users [%d] \n",num_users);
   for(idx=0; idx<num_users; idx++)
   {
     int num_entries;
     uint8 sharexorhash[DIGEST_LENGTH];
-    uint8 estimated_digest[DIGEST_LENGTH];
     int idx1;
 
     read(fd_ae, &num_entries, sizeof(num_entries)); //read all entires
-    printf(" num entries [%d] \n",num_entries);
     for(idx1=0; idx1< num_entries; idx1++)
     {
       uint8 share_num;
       read(fd_ae, &sharexorhash, sizeof(uint8)*DIGEST_LENGTH); //read sharexorhash
       read(fd_ae, &estimated_digest, sizeof(uint8)*DIGEST_LENGTH); //read digest
       read(fd_ae, &share_num, sizeof(uint8)); //read digest
-      printf("share num [%d] \n",share_num);
       // xor the obtained digest with the protector value to obtain
       // our share.
       _xor_share_with_digest(estimated_share,sharexorhash,
@@ -363,8 +360,7 @@ int pph_unlock_password_data(int ctxId)
   // now we attempt to recombine the secret, we have given him all of the 
   // obtained shares.
   
-  gfshare_ctx_dec_newshares(G, share_numbers);
-  printf("New shares created \n");
+  gfshare_ctx_dec_newshares(G, share_numbers);;
   gfshare_ctx_dec_extract(G, secret);
 
   // verify that we got a proper secret back.
@@ -372,14 +368,15 @@ int pph_unlock_password_data(int ctxId)
     return 8;
   }
 
+  printf("Secret is created ! \n");
+
   // else, we have a correct secret and we will copy it back to the provided
   // context.
   if(ctx->secret == NULL){
     ctx->secret = calloc(sizeof(ctx->secret),SHARE_LENGTH);
   }
   memcpy(ctx->secret,secret,SHARE_LENGTH);
-   printf("New secret created \n");
-
+  ctx->AES = ctx->secret;
   // if the share context is not initialized, initialize one with the
   // information we have about our context. 
   if(ctx->share_context == NULL) {
@@ -391,11 +388,11 @@ int pph_unlock_password_data(int ctxId)
                                                ctx->threshold,
                                                SHARE_LENGTH);
   }
-   printf("New gfshare created \n");
+  
   // we have an initialized share context, we set the recombined secret to the
   // context's secret and set the flag to one so it is ready to use.
   gfshare_ctx_enc_setsecret(ctx->share_context, ctx->secret);
-  printf("pph_unlock_password_data ended [%d] \n", ctxId);
+
   return 0;
 }
 /*
