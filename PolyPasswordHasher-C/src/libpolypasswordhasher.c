@@ -201,11 +201,14 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
   write_to_enclave(&len, sizeof(int));
   write_to_enclave(INIT_CONTEXT,strlen(INIT_CONTEXT)+1);
   write_to_enclave(&threshold,sizeof(int));
-
+  //Read Integrity
+  read_from_enclave(context->secret_integrity,sizeof(uint8)*DIGEST_LENGTH);
+  
   int ctxId ;
   read_from_enclave(&ctxId,sizeof(int));
   printf("libppph:: data from enclave, context id = [%d] \n",ctxId); 
   context->pph_ctx_id =ctxId;
+
   /*TEST-OPENSGX-SEGMENT*/
 
   // -1 means enclave is out of instances
@@ -1050,7 +1053,8 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
   
   uint8 share_numbers[MAX_NUMBER_OF_SHARES];
   //TODO gfshare_ctx *G should be in enclave
-  gfshare_ctx *G;
+  // Pallabi: commented, moved to pph_unlock_password_data in pph_enclave
+  //gfshare_ctx *G;
   unsigned int i;
   uint8 secret[SHARE_LENGTH];
   uint8 salted_password[MAX_PASSWORD_LENGTH+MAX_SALT_LENGTH];
@@ -1061,7 +1065,21 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
   pph_previous_login *this_login, *next_login;
   pph_bootstrap_entry *bootstrap_update_entry, *bootstrap_node;
   
+ //Pallabi: Added
+  struct _reload_data
+  {
+      int sentinelSize; // for head it will contain the size and for rest its -1
+      uint8  digest[DIGEST_LENGTH]; //dont create memory just copy the pointer [DIGEST_LENGTH]
+      uint8 shareNum;
+      uint8 * shareXorHash; //dont create memory just copy the pointer [DIGEST_LENGTH]
+      struct _reload_data *next;
+  } ;
 
+  typedef struct _reload_data reload_data;
+
+  // Create array of reload_data user level
+  reload_data **reload_users = malloc(sizeof(reload_data *) *username_count);
+ 
   //sanitize the data.
   if(ctx == NULL || usernames == NULL || passwords == NULL || 
       username_lengths == NULL){
@@ -1077,17 +1095,21 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
   }
 
 
+  // Pallabi: commented, moved to pph_unlock_password_data in pph_enclave
   // initialize the share numbers
-  for(i=0;i<MAX_NUMBER_OF_SHARES;i++){
-    share_numbers[i] = 0;
-  }
+  //for(i=0;i<MAX_NUMBER_OF_SHARES;i++){
+  //  share_numbers[i] = 0;
+  //}
   
   // TODO this should be moved inside enclave
   // initialize a recombination context
-  G = gfshare_ctx_init_dec( share_numbers, MAX_NUMBER_OF_SHARES-1, SHARE_LENGTH);
+  // Pallabi: commented, moved to pph_unlock_password_data in pph_enclave
+  //G = gfshare_ctx_init_dec( share_numbers, MAX_NUMBER_OF_SHARES-1, SHARE_LENGTH);
 
   // traverse our possible users
   current_user=ctx->account_data;
+  int entryCnt;
+  int cnt=0;
   while(current_user!=NULL){
     // check if each of the provided users is inside the context. We traverse
     // our user list inside the while, and compare against the provided users 
@@ -1101,49 +1123,118 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
 
         // this is an existing user
         entry = current_user->account.entries;
-        
+        reload_data * head_data=NULL;
+
         // check if he is a protector account.
-        if(entry->share_number != SHIELDED_ACCOUNT && 
-                entry->share_number != BOOTSTRAP_ACCOUNT){
-        
+        if(entry->share_number != SHIELDED_ACCOUNT && entry->share_number != BOOTSTRAP_ACCOUNT)
+        {
           // if he is a protector account, we must attempt to reconstruct the
           // shares using their information, traverse his entries
+          entryCnt=0;
           while(entry!=NULL){
-
-              /* TODO move this into enclave
-               * a) calculate digest (hash of salted password) -- this can be done outside enclave so no change here
-               * b) send digest and protector value into enclave
-               * c) take xor of digest and protector value to obtain share inside the enclave
-               * d) give share to the recombinator inside the enclave
-               */
+            //Pallabi: Added
+             reload_data *rel_data=malloc(sizeof(reload_data));
+            /* TODO move this into enclave
+             * a) calculate digest (hash of salted password) -- this can be done outside enclave so no change here
+             * b) send digest and protector value into enclave
+             * c) take xor of digest and protector value to obtain share inside the enclave
+             * d) give share to the recombinator inside the enclave
+             */
 
         	  // TODO part a: calculate the digest given the password and part b send into enclave
             memcpy(salted_password,entry->salt,entry->salt_length);
             memcpy(salted_password+entry->salt_length, passwords[i],
                 password_lengths[i]);
-            _calculate_digest(estimated_digest,salted_password,
+            _calculate_digest(rel_data->digest,salted_password,
              entry->salt_length + password_lengths[i]);
 
+            rel_data->shareXorHash = entry->sharexorhash;
+            rel_data->sentinelSize = -1;
+            //rel_data->digest =  estimated_digest;
+            rel_data->shareNum =  entry->share_number;
+            rel_data->next= NULL;
             // TODO part c
             // xor the obtained digest with the protector value to obtain
             // our share.
-            _xor_share_with_digest(estimated_share,entry->sharexorhash,
-                estimated_digest, SHARE_LENGTH);
+            // _xor_share_with_digest(estimated_share,entry->sharexorhash,
+            //     estimated_digest, SHARE_LENGTH);
          
             // TODO part d: the recombinator needs to be moved into the enclave
             // give share to the recombinator. 
-            share_numbers[entry->share_number] = entry->share_number+1;
-            gfshare_ctx_dec_giveshare(G, entry->share_number,estimated_share);
+            // share_numbers[entry->share_number] = entry->share_number+1;
+            // gfshare_ctx_dec_giveshare(G, entry->share_number,estimated_share);
 
             // move to the next entry.
             entry = entry->next;
+            entryCnt++;
+            if(head_data == NULL)
+              head_data = rel_data;
+            else
+            {
+              rel_data->next = head_data;
+              head_data=rel_data;
+            }
           }
-        } 
+          if(head_data != NULL)
+          {
+            reload_data *sentinel_data=malloc(sizeof(reload_data));
+            sentinel_data->sentinelSize = entryCnt;
+            sentinel_data->next=head_data;
+            head_data =sentinel_data;
+          }
+        }
+        if(head_data != NULL)
+          reload_users[cnt++] = head_data;
+        break; //a current user cant have two usernames so lets break here. TODO: ask santiago if its ok
       }
     } 
     current_user = current_user->next;
   }
 
+  //Make the enclave calls now
+  if(cnt > 0) //only if we have user accounts
+  {
+    int idx;
+
+    /*TEST-OPENSGX-SEGMENT*/
+    if(initializePipe("TO_ENCLAVE", "TO_HOST") == 1){
+      printf("LibPPH: ERROR CREATING PIPE \n");
+      return PPH_NO_MEM; //Re use error code - not a good idea :/
+    }
+    
+    int len = strlen(UNLOCK_PASSWD_DB);
+    write_to_enclave(&len, sizeof(int));
+    write_to_enclave(UNLOCK_PASSWD_DB,strlen(UNLOCK_PASSWD_DB)+1);
+    write_to_enclave(&(ctx->pph_ctx_id),sizeof(int)); //write the context id
+    write_to_enclave(&(ctx->secret_integrity), sizeof(uint8) * DIGEST_LENGTH);
+    write_to_enclave(&cnt, sizeof(int));
+
+    for(idx=0; idx<cnt; idx++)//for each user
+    {
+      reload_data *head_data= (reload_data *)reload_users[idx];
+      write_to_enclave(&(head_data->sentinelSize), sizeof(int));
+      reload_data * temp = head_data;
+      head_data = head_data->next;
+      free(temp);
+      while(head_data != NULL)//Write for each entry the digest, saltedhast and sharenum
+      {
+        write_to_enclave(head_data->shareXorHash, sizeof(uint8)*DIGEST_LENGTH);
+        write_to_enclave(head_data->digest, sizeof(uint8)*DIGEST_LENGTH);
+        write_to_enclave(&(head_data->shareNum), sizeof(uint8));
+        reload_data *temp = head_data;
+        head_data=head_data->next;
+        free(temp);
+      }
+    }
+    free(reload_users);
+  }
+
+  int ret_val =PPH_ERROR_OK ;
+  read_from_enclave(&ret_val,sizeof(int));
+  if(ret_val != 0){
+    printf("Wrong secret generated \n");
+    return PPH_ACCOUNT_IS_INVALID; // means we dint get a correct secret
+  }
 
   /* TODO
    * a) the recombination of the secret needs to be moved into the enclave
@@ -1158,45 +1249,45 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
   // TODO part a: recombination of secret and verfication
   // now we attempt to recombine the secret, we have given him all of the 
   // obtained shares.
-  gfshare_ctx_dec_newshares(G, share_numbers);
-  gfshare_ctx_dec_extract(G, secret);
+  //gfshare_ctx_dec_newshares(G, share_numbers);
+  //gfshare_ctx_dec_extract(G, secret);
 
   // verify that we got a proper secret back.
-  if(check_pph_secret(secret, ctx->secret_integrity) != PPH_ERROR_OK){
-    return PPH_ACCOUNT_IS_INVALID;
+  //if(check_pph_secret(secret, ctx->secret_integrity) != PPH_ERROR_OK){
+    //return PPH_ACCOUNT_IS_INVALID;
     
-  }
+  //}
 
   // TODO part b: store secret
   // else, we have a correct secret and we will copy it back to the provided
   // context.
-  if(ctx->secret == NULL){
-    ctx->secret = calloc(sizeof(ctx->secret),SHARE_LENGTH);
-  }
-  memcpy(ctx->secret,secret,SHARE_LENGTH);
+  // if(ctx->secret == NULL){
+  //   ctx->secret = calloc(sizeof(ctx->secret),SHARE_LENGTH);
+  // }
+  // memcpy(ctx->secret,secret,SHARE_LENGTH);
 
   // TODO part c: initialize gfshare_context which is an object inside enclave
   // if the share context is not initialized, initialize one with the
   // information we have about our context. 
-  if(ctx->share_context == NULL) {
-    for(i = 0; i < MAX_NUMBER_OF_SHARES; i++) {
-      share_numbers[i]=(unsigned char)i+1;
-    }
-    ctx->share_context = gfshare_ctx_init_enc( share_numbers,
-                                               MAX_NUMBER_OF_SHARES-1,
-                                               ctx->threshold,
-                                               SHARE_LENGTH);
-  }
+  // if(ctx->share_context == NULL) {
+  //   for(i = 0; i < MAX_NUMBER_OF_SHARES; i++) {
+  //     share_numbers[i]=(unsigned char)i+1;
+  //   }
+  //   ctx->share_context = gfshare_ctx_init_enc( share_numbers,
+  //                                              MAX_NUMBER_OF_SHARES-1,
+  //                                              ctx->threshold,
+  //                                              SHARE_LENGTH);
+  // }
   
   // TODO part b: AES_key is same as secret, we set secret in gfshare_ctx_enc_setsecret
   // santiago recommended we use a different version
   // we have an initialized share context, we set the recombined secret to the
   // context's secret and set the flag to one so it is ready to use.
-  gfshare_ctx_enc_setsecret(ctx->share_context, ctx->secret);
+  //gfshare_ctx_enc_setsecret(ctx->share_context, ctx->secret);
 
   // TODO part d: is_normal_operation SHOULD NOT be moved to enclave
   ctx->is_normal_operation = true;
-  ctx->AES_key = ctx->secret;
+  ctx->AES_key = ctx->secret= NULL;
 
   /* update the bootstrap accounts */
   bootstrap_update_entry = ctx->bootstrap_entries;
@@ -1215,7 +1306,8 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
     // TODO part e: encrypting the bootstrap accounts with the PPH method
     // move this operation into enclave and send back hash encrypted with AES_key for storage
     /* encrypt the original entry */
-    _encrypt_digest(entry->sharexorhash, entry->sharexorhash, ctx->AES_key, entry->salt);
+    obtain_shielded_hash(ctx, entry, entry->sharexorhash, entry->sharexorhash);
+    //_encrypt_digest(entry->sharexorhash, entry->sharexorhash, ctx->AES_key, entry->salt);
 
     /* update sharenumbers */
     entry->share_number = SHIELDED_ACCOUNT;
@@ -1237,15 +1329,17 @@ PPH_ERROR pph_unlock_password_data(pph_context *ctx,unsigned int username_count,
     if (this_login->entry->share_number == SHIELDED_ACCOUNT) {
 
     	// TODO encryption with AES key should be moved into enclave
-      _encrypt_digest(estimated_digest, this_login->digest, ctx->AES_key, this_login->entry->salt);
+      obtain_shielded_hash(ctx, this_login->entry, this_login->digest, estimated_digest);
+      //_encrypt_digest(estimated_digest, this_login->digest, ctx->AES_key, this_login->entry->salt);
 
     } else {
 
     	// TODO calculation of share and resulting XOR should be moved into enclave
-      gfshare_ctx_enc_getshare(ctx->share_context, 
-              (uint8)this_login->entry->share_number, estimated_share);
-      _xor_share_with_digest(estimated_digest, this_login->digest, estimated_share,
-              DIGEST_LENGTH);
+      obtain_protected_hash(ctx, this_login->entry, this_login->digest, estimated_digest, (uint8)this_login->entry->share_number);
+      // gfshare_ctx_enc_getshare(ctx->share_context, 
+      //         (uint8)this_login->entry->share_number, estimated_share);
+      // _xor_share_with_digest(estimated_digest, this_login->digest, estimated_share,
+      //         DIGEST_LENGTH);
     }
 
     if (memcmp(estimated_digest, this_login->entry->sharexorhash,
@@ -1482,16 +1576,6 @@ pph_context *pph_reload_context(const unsigned char *filename){
     return PPH_NO_MEM; //Re use error code - not a good idea :/
   }
 
-  // Added to be able to add the new context in the SGX as well
-  int len = strlen(RELOAD_CONTEXT);
-  write_to_enclave(&len, sizeof(int));
-  write_to_enclave(RELOAD_CONTEXT,strlen(RELOAD_CONTEXT)+1);
-  
-  int ctxId ;
-  read_from_enclave(&ctxId,sizeof(int));
-  printf("libppph:: data from enclave for reloaded context, context id = [%d] \n",ctxId); 
-  loaded_context->pph_ctx_id =ctxId;
-
   fread(loaded_context,sizeof(*loaded_context),1,fp);
   
   // build the account and entry list out of the information from the file. 
@@ -1542,7 +1626,18 @@ pph_context *pph_reload_context(const unsigned char *filename){
 
   // 4) close the file.
   fclose(fp);
-    
+  
+  // Added to be able to add the new context in the SGX as well
+  int len = strlen(RELOAD_CONTEXT);
+  write_to_enclave(&len, sizeof(int));
+  write_to_enclave(RELOAD_CONTEXT,strlen(RELOAD_CONTEXT)+1);
+  write_to_enclave(&(loaded_context->threshold),sizeof(int));
+  //write_to_enclave(&(loaded_context->secret_integrity),sizeof(uint8)*DIGEST_LENGTH);
+  int ctxId ;
+  read_from_enclave(&ctxId,sizeof(int));
+  printf("libppph:: data from enclave for reloaded context, context id = [%d] \n",ctxId); 
+  loaded_context->pph_ctx_id =ctxId;
+
   return loaded_context;
     
 }
@@ -2022,7 +2117,7 @@ int obtain_protected_hash(pph_context *ctx, pph_entry *entry_node, uint8 *digest
 
   write_to_enclave(&len, sizeof(int));
   write_to_enclave(PROTECTED_HASH,strlen(PROTECTED_HASH)+1);
-  write_to_enclave(&(ctx->pph_ctx_id),sizeof(unsigned int)); //write the context id
+  write_to_enclave(&(ctx->pph_ctx_id),sizeof(int)); //write the context id
   write_to_enclave(&share_num,sizeof(uint8)); //write the share number(we want 1 byte)
   write_to_enclave(digest,sizeof(uint8)*DIGEST_LENGTH); //write the saltedhash
 

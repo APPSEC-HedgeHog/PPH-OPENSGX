@@ -168,7 +168,7 @@ int pph_context_create(int threshold)
   }
 
   gfshare_ctx_enc_setsecret(contexts[current_idx]->share_context, contexts[current_idx]->secret);
-
+  write(fd_ea, contexts[current_idx]->secret_integrity, sizeof(uint8)*DIGEST_LENGTH);
   printf("[%s] context is created [%d] \n",TAG,current_idx);
   return current_idx;
 }
@@ -283,21 +283,143 @@ int pph_create_account(int contextId, uint8 * sharedxorhash, int isProtected)
   return retval;
 }
 
+int check_pph_secret(uint8 *secret, uint8 *secret_integrity)
+{
+  //printf("%u %u \n",secret,secret_integrity);
+  uint8 stream_digest[DIGEST_LENGTH], temp_digest[DIGEST_LENGTH];
+  int i;
+
+  if(secret == NULL || secret_integrity == NULL){
+    
+    return 11;
+    
+  }
+
+  // generate the digest for the stream, we will iterate
+  // a high number of times to slow down the attacker
+  _calculate_digest(stream_digest, secret, DIGEST_LENGTH);
+  for (i = 0; i < SIGNATURE_HASH_ITERATIONS-1; i++){
+    memcpy(temp_digest, stream_digest, DIGEST_LENGTH);
+    _calculate_digest(stream_digest, temp_digest, DIGEST_LENGTH);
+  }
+
+  if(memcmp(stream_digest, secret_integrity, DIGEST_LENGTH) == 0){
+    return 0;
+  }
+
+  return 8;
+    
+}
+
+int pph_unlock_password_data(int ctxId)
+{
+  printf("pph_unlock_password_data started [%d] \n", ctxId);
+  int num_users;
+  int idx;
+  uint8 share_numbers[MAX_NUMBER_OF_SHARES];
+  gfshare_ctx *G;
+  uint8 estimated_share[SHARE_LENGTH];
+  enclave_context * ctx = contexts[ctxId];
+  uint8 secret[SHARE_LENGTH];
+  uint8 estimated_digest[DIGEST_LENGTH];
+  
+  //initialize the share numbers
+  for(idx=0;idx<MAX_NUMBER_OF_SHARES;idx++){
+   share_numbers[idx] = 0;
+  }
+  //initialize a recombination context
+  G = gfshare_ctx_init_dec( share_numbers, MAX_NUMBER_OF_SHARES-1, SHARE_LENGTH);
+
+  read(fd_ae, ctx->secret_integrity, sizeof(uint8) * DIGEST_LENGTH);
+  read(fd_ae, &num_users, sizeof(num_users)); //read num users
+  for(idx=0; idx<num_users; idx++)
+  {
+    int num_entries;
+    uint8 sharexorhash[DIGEST_LENGTH];
+    int idx1;
+
+    read(fd_ae, &num_entries, sizeof(num_entries)); //read all entires
+    for(idx1=0; idx1< num_entries; idx1++)
+    {
+      uint8 share_num;
+      read(fd_ae, &sharexorhash, sizeof(uint8)*DIGEST_LENGTH); //read sharexorhash
+      read(fd_ae, &estimated_digest, sizeof(uint8)*DIGEST_LENGTH); //read digest
+      read(fd_ae, &share_num, sizeof(uint8)); //read digest
+      // xor the obtained digest with the protector value to obtain
+      // our share.
+      _xor_share_with_digest(estimated_share,sharexorhash,
+          estimated_digest, SHARE_LENGTH);
+   
+      // TODO part d: the recombinator needs to be moved into the enclave
+      // give share to the recombinator. 
+      share_numbers[share_num] = share_num+1;
+      gfshare_ctx_dec_giveshare(G, share_num,estimated_share);
+    }
+  }
+
+  // now we attempt to recombine the secret, we have given him all of the 
+  // obtained shares.
+  
+  gfshare_ctx_dec_newshares(G, share_numbers);;
+  gfshare_ctx_dec_extract(G, secret);
+
+  // verify that we got a proper secret back.
+  if(check_pph_secret(secret, ctx->secret_integrity) != 0){
+    return 8;
+  }
+
+  printf("Secret is created ! \n");
+
+  // else, we have a correct secret and we will copy it back to the provided
+  // context.
+  if(ctx->secret == NULL){
+    ctx->secret = calloc(sizeof(ctx->secret),SHARE_LENGTH);
+  }
+  memcpy(ctx->secret,secret,SHARE_LENGTH);
+  ctx->AES = ctx->secret;
+  // if the share context is not initialized, initialize one with the
+  // information we have about our context. 
+  if(ctx->share_context == NULL) {
+    for(idx = 0; idx < MAX_NUMBER_OF_SHARES; idx++) {
+      share_numbers[idx]=(unsigned char)idx+1;
+    }
+    ctx->share_context = gfshare_ctx_init_enc( share_numbers,
+                                               MAX_NUMBER_OF_SHARES-1,
+                                               ctx->threshold,
+                                               SHARE_LENGTH);
+  }
+  
+  // we have an initialized share context, we set the recombined secret to the
+  // context's secret and set the flag to one so it is ready to use.
+  gfshare_ctx_enc_setsecret(ctx->share_context, ctx->secret);
+
+  return 0;
+}
 /*
 *   Generate a context id in the enclave contexts
 */
 int pph_reload_context()
 {
 
- printf("pph_reload_context");
+  printf("pph_reload_context");
+  int threshold;
+  uint8 secret_integrity[DIGEST_LENGTH];
 
- if(MAX_SUPPORTED_CONTEXTS-1 == current_idx)// we cant handle any more contexts
+  read(fd_ae, &threshold, sizeof(threshold));
+  //read(fd_ae, secret_integrity, sizeof(uint8) * DIGEST_LENGTH);
+
+  if(MAX_SUPPORTED_CONTEXTS-1 == current_idx)// we cant handle any more contexts
   {
     printf("[%s] contexts exhausted! max supported [%d] \n",TAG,MAX_SUPPORTED_CONTEXTS);
     return -1;
   }
   //Create Enclave Context
   contexts[++current_idx] = malloc(sizeof(enclave_context));
+  contexts[current_idx]->threshold = threshold;
+  contexts[current_idx]->secret = NULL;
+  contexts[current_idx]->share_context = NULL;
+
+  //memcpy(contexts[current_idx]->secret_integrity,secret_integrity,DIGEST_LENGTH);
 
   printf("[%s] context is created [%d] \n",TAG,current_idx);
 
@@ -338,7 +460,7 @@ void handle_pph_request(char * command, int len)
   }
   else if(!strncmp(command, SHIELDED_HASH, len)) //This call handles Shielded account creation
   {
-    unsigned int context_id;
+    int context_id;
     read(fd_ae, &context_id, sizeof(context_id));
     uint8 sharedxorhash[DIGEST_LENGTH];
     int success_msg = pph_create_account(context_id, sharedxorhash, 0);
@@ -351,12 +473,19 @@ void handle_pph_request(char * command, int len)
     int success_msg = pph_reload_context();
     write(fd_ea, &success_msg, sizeof(int));
   }
+  else if(!strncmp(command, UNLOCK_PASSWD_DB, len)) //This call handles unlock password context
+  {
+    int context_id;
+    read(fd_ae, &context_id, sizeof(context_id));
+    int success_msg = pph_unlock_password_data(context_id);
+    write(fd_ea, &success_msg, sizeof(int));
+  }
+
 }
 
 /* main operation. communicate with santiago */
 void enclave_main(int argc, char **argv)
 {
-	int i;
 
   char port_enc_to_app[NAME_BUF_SIZE];
   char port_app_to_enc[NAME_BUF_SIZE];

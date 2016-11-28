@@ -42,12 +42,6 @@ int main(void)
   }else{
     printf("generic error message\n");
   }
-  pph_destroy_context(context);
-  return 0; 
-  //WORK IN PROGRESS - works till here
-  //Cause init_context and destroy context
-  //works for now but with this implementation nothing below will work
-  //Test by removing the return
 
   // when creating a user with no shares, we get a *shielded* account. 
   // Shielded accounts have their hash encrypted and are unable to 
@@ -136,11 +130,9 @@ int main(void)
     printf("you are not carl");
   }
   
-  
   // we should now store the context and free the data before leaving
   pph_store_context(context,"securepasswords");
   pph_destroy_context(context);
-
 
   return 0;
 }
