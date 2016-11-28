@@ -254,7 +254,13 @@ uint8 *generate_pph_secret(uint8 *integrity_check)
     
 }
 
-// isProtected is 1 or 0
+/* pph_create_account: generates appropriate digest values for account type
+*  input:
+*    int contextId: current context we're working in
+*    uint8 *sharexorhash: salted hash of user password that we receive from PPH
+*    int isProtected: 1 for protector entry, 0 for shielded entry
+*  return: error code
+*/
 int pph_create_account(int contextId, uint8 * sharedxorhash, int isProtected)
 {
   int retval=0;
