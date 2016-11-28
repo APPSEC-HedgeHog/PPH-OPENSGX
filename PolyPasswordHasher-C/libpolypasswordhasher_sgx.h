@@ -9,6 +9,10 @@ const char DEL_CONTEXT [] ="DEL_CONTEXT";
 const char PROTECTED_HASH [] ="PROTECTED_HASH";
 //send hash for shielded accounts
 const char SHIELDED_HASH [] ="SHIELDED_HASH";
+// Added to indicate reloading of context
+const char RELOAD_CONTEXT []="RELOAD_CONTEXT";
+//Added for unlocking the password database
+const char UNLOCK_PASSWD_DB []="UNLOCK_PASSWD_DB";
 
 int initializePipe(char *enc_to_app, char * app_to_enc);
 void write_to_enclave(char *data, int len);

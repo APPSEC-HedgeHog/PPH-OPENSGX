@@ -1348,6 +1348,8 @@ PPH_ERROR pph_store_context(pph_context *ctx, const unsigned char *filename){
   context_to_store.secret = NULL;
   context_to_store.account_data = NULL;
   context_to_store.bootstrap_entries = NULL;
+  // Pallabi: Make the context ID Null
+  context_to_store.pph_ctx_id=-1;
 
   // set this context's information to botstrapping.
   context_to_store.is_normal_operation = false; 
@@ -1474,6 +1476,21 @@ pph_context *pph_reload_context(const unsigned char *filename){
     return NULL;
     
   }
+
+  if(initializePipe("TO_ENCLAVE", "TO_HOST") == 1){
+    printf("LibPPH: ERROR CREATING PIPE \n");
+    return PPH_NO_MEM; //Re use error code - not a good idea :/
+  }
+
+  // Added to be able to add the new context in the SGX as well
+  int len = strlen(RELOAD_CONTEXT);
+  write_to_enclave(&len, sizeof(int));
+  write_to_enclave(RELOAD_CONTEXT,strlen(RELOAD_CONTEXT)+1);
+  
+  int ctxId ;
+  read_from_enclave(&ctxId,sizeof(int));
+  printf("libppph:: data from enclave for reloaded context, context id = [%d] \n",ctxId); 
+  loaded_context->pph_ctx_id =ctxId;
 
   fread(loaded_context,sizeof(*loaded_context),1,fp);
   

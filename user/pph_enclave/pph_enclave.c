@@ -55,7 +55,7 @@ typedef struct _enclave_context {
 
 enclave_context ** contexts = NULL; //should contain array of contexts
 int current_idx = -1;
-int MAX_SUPPORTED_CONTEXTS = 1;
+int MAX_SUPPORTED_CONTEXTS = 2;
 /*this means we share a single pipe*/
 int fd_ea = -1;
 int fd_ae = -1;
@@ -283,6 +283,28 @@ int pph_create_account(int contextId, uint8 * sharedxorhash, int isProtected)
   return retval;
 }
 
+/*
+*   Generate a context id in the enclave contexts
+*/
+int pph_reload_context()
+{
+
+ printf("pph_reload_context");
+
+ if(MAX_SUPPORTED_CONTEXTS-1 == current_idx)// we cant handle any more contexts
+  {
+    printf("[%s] contexts exhausted! max supported [%d] \n",TAG,MAX_SUPPORTED_CONTEXTS);
+    return -1;
+  }
+  //Create Enclave Context
+  contexts[++current_idx] = malloc(sizeof(enclave_context));
+
+  printf("[%s] context is created [%d] \n",TAG,current_idx);
+
+  return current_idx;
+}
+
+
 //Add for all API calls
 void handle_pph_request(char * command, int len)
 {
@@ -299,14 +321,14 @@ void handle_pph_request(char * command, int len)
   }
   else if(!strncmp(command, DEL_CONTEXT, len)) //This call handles Delete context
   {
-    unsigned int context_id;
+    int context_id;
     read(fd_ae, &context_id, sizeof(context_id));
     int success_msg = pph_context_destroy(context_id);
     write(fd_ea, &success_msg, sizeof(int));
   }
   else if(!strncmp(command, PROTECTED_HASH, len)) //This call handles Protected account creation
   {
-    unsigned int context_id;
+    int context_id;
     read(fd_ae, &context_id, sizeof(context_id));
     uint8 sharedxorhash[DIGEST_LENGTH];
     int success_msg = pph_create_account(context_id, sharedxorhash, 1);
@@ -323,6 +345,11 @@ void handle_pph_request(char * command, int len)
     write(fd_ea, &success_msg, sizeof(int));
     if(success_msg == 0)
       write(fd_ea, sharedxorhash, sizeof(uint8) * DIGEST_LENGTH);
+  }
+  else if(!strncmp(command, RELOAD_CONTEXT, len)) //This call handles Reloading context
+  {
+    int success_msg = pph_reload_context();
+    write(fd_ea, &success_msg, sizeof(int));
   }
 }
 
@@ -361,7 +388,7 @@ void enclave_main(int argc, char **argv)
 
   //printf(" before malloc \n");
   //Init context array
-  contexts = malloc(sizeof(enclave_context *) * MAX_SUPPORTED_CONTEXTS);//For now only one context TODO: dynamic
+  contexts = malloc(sizeof(enclave_context *) * MAX_SUPPORTED_CONTEXTS);//For now only fixed context TODO: dynamic
   //printf(" after malloc \n");
   // Read the request operations
   int len;

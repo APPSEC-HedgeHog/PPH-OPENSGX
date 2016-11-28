@@ -203,7 +203,7 @@ typedef struct _pph_context{
   pph_bootstrap_entry *bootstrap_entries;
 
   //stores context array id in enclave
-  unsigned int pph_ctx_id ;
+  int pph_ctx_id ;
 } pph_context;
 
 
