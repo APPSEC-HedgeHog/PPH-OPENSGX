@@ -409,7 +409,7 @@ int pph_reload_context()
   uint8 secret_integrity[DIGEST_LENGTH];
 
   read(fd_ae, &threshold, sizeof(threshold));
-  read(fd_ae, secret_integrity, sizeof(uint8) * DIGEST_LENGTH);
+  //read(fd_ae, secret_integrity, sizeof(uint8) * DIGEST_LENGTH);
 
   if(MAX_SUPPORTED_CONTEXTS-1 == current_idx)// we cant handle any more contexts
   {
@@ -422,7 +422,7 @@ int pph_reload_context()
   contexts[current_idx]->secret = NULL;
   contexts[current_idx]->share_context = NULL;
 
-  memcpy(contexts[current_idx]->secret_integrity,secret_integrity,DIGEST_LENGTH);
+  //memcpy(contexts[current_idx]->secret_integrity,secret_integrity,DIGEST_LENGTH);
 
   printf("[%s] context is created [%d] \n",TAG,current_idx);
 

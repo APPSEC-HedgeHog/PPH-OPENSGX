@@ -1630,7 +1630,7 @@ pph_context *pph_reload_context(const unsigned char *filename){
   write_to_enclave(&len, sizeof(int));
   write_to_enclave(RELOAD_CONTEXT,strlen(RELOAD_CONTEXT)+1);
   write_to_enclave(&(loaded_context->threshold),sizeof(int));
-  write_to_enclave(&(loaded_context->secret_integrity),sizeof(uint8)*DIGEST_LENGTH);
+  //write_to_enclave(&(loaded_context->secret_integrity),sizeof(uint8)*DIGEST_LENGTH);
   int ctxId ;
   read_from_enclave(&ctxId,sizeof(int));
   printf("libppph:: data from enclave for reloaded context, context id = [%d] \n",ctxId); 
