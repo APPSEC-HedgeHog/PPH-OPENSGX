@@ -532,10 +532,14 @@ void enclave_main(int argc, char **argv)
   while(1)
   {
     char msg[20]={0};
+    size_t ret;
     //printf(" reading \n");
-    read(fd_ae, &len, sizeof(int));//first read how many characters
-    //printf(" first [%d] \n",len);
-    read(fd_ae, msg, len+1);
+    ret = read(fd_ae, &len, sizeof(int));//first read how many characters
+    //printf(" first read [%d] \n",ret);
+    if(ret == 0) continue;// it means libpolypassword hasher has closed its pipe 
+    ret= read(fd_ae, msg, len+1);
+    //printf(" second read [%d] \n",ret);
+    if(ret == 0) continue;// it means libpolypassword hasher has closed its pipe
     //printf(" second [%s] \n",msg);
     //printf(" goto handle request \n");
     handle_pph_request(msg, len);
