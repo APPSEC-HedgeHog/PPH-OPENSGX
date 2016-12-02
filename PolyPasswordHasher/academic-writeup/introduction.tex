@@ -1,0 +1,91 @@
+\section{Introduction}
+\label{SEC:introduction}
+
+Password database thefts are increasingly common and continue to put users at
+risk. Both individuals and businesses want passwords to be stored efficiently,
+yet in a way that minimizes the impact of a password database disclosure. Major
+corporations, in particular, have encountered significant challenges in trying
+to protect their customers' and clients' identities and accounts. Reflecting
+the reach of the problem, a hacker on a Russian forum was selling a database
+with more than a billion password hashes obtained from different password
+databases, primarily through SQL injection \cite{miranteTR13}. Some companies
+and organizations that have been successfully hacked include: the Social
+Security Administration, Hotmail, LastFM, Formspring, ScribD, the New York
+Times, Nvidia, Evernote, LinkedIn, Billabong, Gawker, Linode, ABC, Yahoo!,
+eHarmony, LivingSocial, and Twitter~\cite{miranteTR13}. Globally -- despite
+ongoing efforts to enhance password security and adhere to best practices --
+password database breaches continue. 
+
+Notwithstanding new technologies such as authentication tags, biometric
+technologies, and NFC-capable devices, the most prevalent user authentication
+method remains the user password. Security experts have long advocated that
+user passwords not be stored in plain text but rather, that they be reduced to
+salted hashes before storing.  A salted hash consists of a secure hash and a
+salt.  The secure hash acts as a one-way function that ensures that an attacker
+cannot easily read the plain-text passwords from disk. Salting inserts a random
+value that complicates the use of tables that allow hackers to immediately look
+up passwords to match most hashes.  Storing passwords with a salted hash is
+widely considered to be the best practice because of the level of protection
+offered and the ease of implementation (e.g., salted hashing requires no
+additional hardware or client software).
+
+However, storing passwords with a salted hash is not a panacea.  That is, when
+stored password data has been compromised, attackers have proven themselves adept at
+quickly cracking large numbers of passwords, even when salted-password hashes
+comprise the stored data. For example, Troy Hunt, a security researcher, showed
+that cracking 60\% of a 40,000-entry salted-SHA1 database can be done in a
+couple of hours, using a couple of GPU’s and an average computer~\cite{thunt-hashing}. 
+
+This paper presents PolyPasswordHasher, a new technique that makes cracking
+individual passwords infeasible because the stored password-entries are 
+interdependent.  We leverage cryptographic hashing and threshold cryptography 
+to combine 
+password hash data with shares so that users unknowingly protect each other's password
+data.  With a small amount of additional work by the server, 
+PolyPasswordHasher increases, by many orders of magnitude, the time an
+attacker needs to crack passwords.  
+
+PolyPasswordHasher is designed to be easy for organizations to adopt.  Much
+like salted hashing, PolyPasswordHasher is a software-only, single-server
+enhancement that can be deployed on a server without any changes to clients.
+PolyPasswordHasher relies on simple primitives that are efficient from a
+storage, memory, and computational standpoint.  It integrates with other forms
+of authentication including: OAuth, hardware tokens, two factor authentication,
+and fingerprint authentication. PolyPasswordHasher is also easy to implement;
+two outside developers, whom we had no prior contact with, independently
+built implementations of PolyPasswordHasher, in different programming
+languages.  Deploying PolyPasswordHasher is a straightforward software
+installation on a server.
+
+The contributions of this paper are as follows: 
+
+\begin{itemize}
+    \item We describe our design of PolyPasswordHasher, a server-side, 
+software-only scheme that protects against an attacker who is able to 
+read all persistent storage on a server, including the complete password file.
+    \item We demonstrate the \PPH has similar performance, storage, and
+memory requirements to deployed systems.
+    \item  We describe a mechanism to shield some user accounts, who
+may be untrustworthy or choose poor passwords, as long as the passwords 
+from a set of \thresholdaccounts are not cracked.
+    \item We analyze different practical scenarios and analyze the properties 
+and limitations of \PPH in these environments.
+\end{itemize}
+
+This paper is organized into eight sections. Sections~\ref{SEC:threat-model}
+and~\ref{SEC:background} introduce the threat model and the theoretical
+background of password storage mechanisms.  Sections~\ref{SEC:design}
+and~\ref{SEC:implementation} provide the design specification and 
+implementation of \PPH. 
+%Section~\ref{SUBSEC:deployment} provides information about our deployed django
+%application and it’s specific design considerations to provide a feel of how an
+%actual PolyPasswordHasher implementation works.  
+Section~\ref{SEC:evaluation} evaluates \PPH's suitability and resilience
+to cracking in a variety of scenarios; it also
+provides information about the implementation’s performance for different kinds
+of operations. 
+We describe the relation to \PPH with other related work in 
+Section~\ref{SEC:related-work}.
+Finally, Section~\ref{SEC:conclusion} summarizes and anaylzes our findings 
+described in the paper.
+

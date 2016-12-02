@@ -1,0 +1,24 @@
+\begin{abstract} 
+
+Over the years, we have witnessed various password-hash database breaches that 
+have affected small and large companies, with a diversity of users and budgets.
+The industry standard, salted hashing (and even key stretching), has proven
+to be insufficient protection against attackers who now have access to clusters of
+GPU-powered password crackers.  Although there are various proposals for better securing
+password storage, most do not offer the same adoption model 
+(software-only, server-side) as salted hashing, which may impede adoption.
+
+In this paper, we present \PPH, a software-only, server-side password storage
+mechanism that requires minimal additional work for the server, but 
+exponentially increases the attacker's effort.  \PPH uses a threshold 
+cryptosystem to interrelate stored password data so that passwords cannot be 
+individually cracked.  Our analysis shows that \PPH is memory and storage
+efficient, hard to crack, and easy to implement.  In many realistic scenarios, 
+cracking a \PPH-enabled database would be infeasible even for an adversary
+with millions of computers.
+
+\end{abstract}
+
+\begin{IEEEkeywords}
+    password, password-hashing, authentication, password cracking, cryptography.
+\end{IEEEkeywords}

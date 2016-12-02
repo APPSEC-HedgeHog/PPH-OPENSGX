@@ -1,0 +1,27 @@
+\section{Conclusion}
+\label{SEC:conclusion}
+
+This work presents \PPH, a technique for protecting user passwords in the 
+event of password database disclosure. \PPH is the first technique
+that requires only software changes on the server and yet requires
+attackers to do asymmetrically more work to crack passwords than
+servers need to do to verify them.  As a result, password
+cracking becomes infeasible for attackers in many cases.
+
+
+\PPH is practical to deploy and is effective in practice.  The performance
+of \PPH is similar to salted hashing.  The memory and storage costs from
+using \PPH are negligible.  So long as good password selection procedures
+are followed, \thresholdaccounts increase an attacker's cracking effort by
+many orders of magnitude.  We show how configuring \partialverification
+in different ways can help to optimize \PPH for different configurations
+of services.
+
+We have installed \PPH at our institution and are gaining practical
+experience to uncover any usability problems.  Five different parties, 
+two of whom had no prior contact with us, authored an implementation
+of \PPH.  There are implementations for a variety of languages and 
+web frameworks available with an MIT license at:
+\showurlx. 
+
+
