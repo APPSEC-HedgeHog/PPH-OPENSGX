@@ -48,6 +48,16 @@
 	
 	$ sudo make install //this will install library and copy the headers to /usr/local**
 	
+	
+Run Python Ref: //Before running make sure above commands are executed and the OpenSGX is started.
+
+	$ cd ROOT REPOSITORY / PolyPasswordHasher
+	$ sudo apt-get install python-pip
+	$ pip install crypto
+	$ export PYTHONPATH=$PWD/PolyPasswordHasher
+	$ cd python-reference-implementation
+	$ python setup.py test
+	
 run test:
 	Open two terminals
 	
@@ -68,26 +78,26 @@ run test:
 
 Steps before pushing a commit to Git.
 
-1. cd polypasswordhasher-src and do a make clean
-2. cd user and do a make clean
-3. cd libsgx and do a make clean
-4. rm *.sgx and *.conf files generated in user/pph_enclave folder
-5. rm sign.key file in root of repository.
-6. remove temporary files that end with a ~(tilde)
-7. rm -rf PolyPasswordHasher-C/m4
-8. rm -rf PolyPasswordHasher-C/config.log
-9. rm user/enclu.c
+$	1. cd polypasswordhasher-src and do a make clean
+$	2. cd user and do a make clean
+$	3. cd libsgx and do a make clean
+$	4. rm *.sgx and *.conf files generated in user/pph_enclave folder
+$	5. rm sign.key file in root of repository.
+$	6. remove temporary files that end with a ~(tilde)
+$	7. rm -rf PolyPasswordHasher-C/m4
+$	8. rm -rf PolyPasswordHasher-C/config.log
+$	9. rm user/enclu.c
 
 do a git status in root of repository to find out what changes are done and what are the untracked files
 if you find still some changes after this that you havent done, then delete them.
 
 Now git add individual files that you have changed
-git add <filename> //dont do git add --all
+$	git add <filename> //dont do git add --all
 
 if you accidentally add in a commit then
-do git reset HEAD <file-name>  to remove that file from staging area
+do $	git reset HEAD <file-name>  to remove that file from staging area
 
-git commit //write something meaningful and save
+$	git commit //write something meaningful and save
 
-git push origin master
+$	git push origin master
 
