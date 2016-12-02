@@ -50,10 +50,13 @@
 	
 	
 Run Python Ref: //Before running make sure above commands are executed and the OpenSGX is started.
-
+	// make sure to install libssl
+	
+	$ sudo apt-get install openssl //one time
+	$ sudo apt-get install libssl-dev //one time
 	$ cd ROOT REPOSITORY / PolyPasswordHasher
-	$ sudo apt-get install python-pip
-	$ pip install crypto
+	$ sudo apt-get install python-pip //one time
+	$ pip install crypto //one time
 	$ export PYTHONPATH=$PWD/PolyPasswordHasher
 	$ cd python-reference-implementation
 	$ python setup.py test
@@ -77,7 +80,6 @@ run test:
 
 
 Steps before pushing a commit to Git.
-
 $	1. cd polypasswordhasher-src and do a make clean
 $	2. cd user and do a make clean
 $	3. cd libsgx and do a make clean
