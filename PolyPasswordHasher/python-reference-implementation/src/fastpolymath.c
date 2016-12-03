@@ -270,6 +270,105 @@ static PyObject *py_pph_check_login(PyObject *module, PyObject *args)
   return Py_BuildValue("i",ret);
 }
 
+static PyObject *py_pph_store_context(PyObject *module, PyObject *args)
+{
+  char * file_name;
+  unsigned int *ptr;
+
+  printf("py_pph_store_context b4  \n");
+  if (!PyArg_ParseTuple(args, "is", &ptr, &file_name)) {
+    // Incorrect args...
+    printf("incorrect args \n");
+    return NULL;
+  }
+  printf("Password file name is [%s] ",file_name);
+
+  pph_context *context = (pph_context *) ptr;
+  int ret = pph_store_context(context, file_name);
+  if(ret !=0 )
+    printf("Error saving passwords file \n");
+
+  return Py_BuildValue("i",ret);
+}
+
+static PyObject *py_pph_reload_context(PyObject *module, PyObject *args)
+{
+  char * file_name;
+  
+  if (!PyArg_ParseTuple(args, "s", &file_name)) {
+    // Incorrect args...
+    return NULL;
+  }
+  
+  printf("py_pph_reload_context \n");
+  pph_context *context;
+  context = pph_reload_context(file_name);
+  return Py_BuildValue("i",context);
+}
+
+static PyObject *py_pph_unlock_password_data(PyObject *module, PyObject *args)
+{
+  PyObject * listObj;
+  PyObject * listObj1;
+  PyObject * stringObj;
+
+  int size;
+  int idx;
+  unsigned int ptr;
+
+  char **username = malloc(sizeof (*username) * size);
+  char **password = malloc(sizeof (*password) * size);
+  int **username_length = malloc(sizeof (*username_length) * size);
+  int **password_length = malloc(sizeof (*password_length) * size);
+
+  printf("calliing unlock \n");
+
+
+  if(!PyArg_ParseTuple(args, "iO!O!", &ptr, &PyList_Type,  &listObj, &PyList_Type, &listObj1))
+    return NULL;
+
+  size = PyList_Size(listObj);  
+
+  for(idx=0;idx<size;idx++)
+  {
+    stringObj=PyList_GetItem(listObj,idx);
+    username[idx] =PyString_AsString(stringObj);
+    stringObj=PyList_GetItem(listObj1,idx);
+    password[idx] =PyString_AsString(stringObj);
+    username_length[idx]= strlen(username[idx]);
+    password_length[idx]= strlen(password[idx]);
+
+    printf("Usernames [%s] \n",username[idx]);
+    printf("Passwords [%s] \n",password[idx]);
+  }
+
+  printf("context [%d] \n",ptr);
+  pph_context *context = (pph_context *) ptr;
+  int ret =pph_unlock_password_data(context,size, username, username_length, password, password_length );
+  if(ret != 0)
+    printf("Unable to unlock database[%d]\n",ret);
+
+  // free(username);
+  // free(password);
+  // free(username_length);
+  // free(password_length);
+
+  return Py_BuildValue("i",ret);
+
+
+
+  // if(!PyArg_ParseTuple(args, "O!", &PyList_Type,  &listObj))
+  //   return NULL;
+
+  // for(idx=0;idx<size;idx++)
+  // {
+  //   stringObj=PyList_GetItem(listObj1,idx);
+  //   password[idx] =PyString_AsString(stringObj);
+  //   printf("Passwords [%s] \n",password[idx]);
+  // }
+
+
+}
 
 static PyObject *full_lagrange(PyObject *module, PyObject *args) {
   // The args are xs (an array of gf256s) and fxs (also an array of gf256s).  
@@ -408,7 +507,13 @@ static PyMethodDef MyFastPolyMathMethods [] = {
   {"py_pph_create_account", py_pph_create_account, METH_VARARGS, 
       "Create pph account"},
   {"py_pph_check_login", py_pph_check_login, METH_VARARGS, 
-      "Check login"},  
+      "Check login"}, 
+  {"py_pph_store_context", py_pph_store_context, METH_VARARGS, 
+      "Stotre context"},
+  {"py_pph_reload_context", py_pph_reload_context, METH_VARARGS, 
+      "Reload context"},
+  {"py_pph_unlock_password_data", py_pph_unlock_password_data, METH_VARARGS, 
+      "Unlock password "},
   {NULL, NULL, 0, NULL}
 };
 

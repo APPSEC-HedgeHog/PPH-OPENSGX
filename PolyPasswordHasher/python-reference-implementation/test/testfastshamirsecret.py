@@ -1,5 +1,5 @@
-import fastshamirsecret as shamirsecret
-from unittest import TestCase
+# import fastshamirsecret as shamirsecret
+# from unittest import TestCase
 
 #  Basic tests for this module.   Should output nothing on success.
 

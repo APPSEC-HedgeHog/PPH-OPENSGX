@@ -124,6 +124,7 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
     
   }
 
+  print("Init context [%d] , [%d] \n", threshold, isolated_check_bits);
   context->threshold=threshold;
   
   // initialize the isolated-check-bits offset, this will be used to limit the
@@ -1416,7 +1417,7 @@ PPH_ERROR pph_store_context(pph_context *ctx, const unsigned char *filename){
   pph_context context_to_store; 
   pph_entry *current_entry;  
 
-
+  printf("here saving context \n");
   // 1) sanitize the data
   if(ctx == NULL || filename == NULL){
     

@@ -127,13 +127,22 @@ class PolyPasswordHasher(object):
   nextavailableshare = None
 
 
-  def __init__(self, threshold, passwordfile = None, isolated_check_bits = 0):
+  def __init__(self, threshold, passwordfile = None, isolated_check_bits = 1):
     """Initialize a new (empty) object with the threshold.   I could store
        the threshold in the file, but don't do this currently.   I just assume
        it's known to the program"""
+
     print('PY:init called')
-    self.c_ptr = fastpolymath_c.py_pph_init_context(1,2)
+
+    if passwordfile is not None:
+      print('reloading the context')
+      self.c_ptr = fastpolymath_c.py_pph_reload_context(passwordfile)
+      return
+
+    self.c_ptr = fastpolymath_c.py_pph_init_context(threshold,isolated_check_bits)
     print('PY: pph init context returned')
+
+    
 
     # self.threshold = threshold
 
@@ -160,6 +169,7 @@ class PolyPasswordHasher(object):
     #   self.secret_integrity_check = self.create_integrity_check(self.shieldedkey)
 
     #   return
+
 
     # # Okay, they have asked me to load in a password file!
     # self.shamirsecretobj = shamirsecret.ShamirSecret(threshold)
@@ -345,78 +355,86 @@ class PolyPasswordHasher(object):
 
   def write_password_data(self, passwordfile):
     """ Persist the password data to disk."""
-    if self.threshold >= self.nextavailableshare:
-      raise ValueError("Would write undecodable password file.   Must have more shares before writing.")
+    ret = fastpolymath_c.py_pph_store_context(self.c_ptr, passwordfile)
+    # if self.threshold >= self.nextavailableshare:
+    #   raise ValueError("Would write undecodable password file.   Must have more shares before writing.")
 
-    # Need more error checking in a real implementation
-    # we will backup important information, set it to None and write the rest
-    secret_backup = self.knownsecret
-    shieldedkey_backup = self.shieldedkey
-    shamirsecretobj_backup = self.shamirsecretobj
+    # # Need more error checking in a real implementation
+    # # we will backup important information, set it to None and write the rest
+    # secret_backup = self.knownsecret
+    # shieldedkey_backup = self.shieldedkey
+    # shamirsecretobj_backup = self.shamirsecretobj
 
-    self.secret = None
-    self.shieldedkey = None
-    self.shamirsecretobj = None
+    # self.secret = None
+    # self.shieldedkey = None
+    # self.shamirsecretobj = None
 
-    open(passwordfile,'w').write(pickle.dumps(self))
+    # open(passwordfile,'w').write(pickle.dumps(self))
 
-    self.knownsecret = secret_backup
-    self.shieldedkey = shieldedkey_backup
-    self.shamirsecretobj = shamirsecretobj_backup
+    # self.knownsecret = secret_backup
+    # self.shieldedkey = shieldedkey_backup
+    # self.shamirsecretobj = shamirsecretobj_backup
 
 
   def unlock_password_data(self, logindata):
+
     """Pass this a list of username, password tuples like: [('admin',
        'correct horse'), ('root','battery staple'), ('bob','puppy')]) and
        it will use this to access the password file if possible."""
 
+    usernames = []
+    passwords = []
+
+    for(username,password) in logindata:
+      usernames.append(username)
+      passwords.append(password)
+
+    fastpolymath_c.py_pph_unlock_password_data(self.c_ptr,usernames,passwords)
+    # if self.knownsecret:
+    #   raise ValueError("PPH is already in normal operation!")
 
 
-    if self.knownsecret:
-      raise ValueError("PPH is already in normal operation!")
+    # # Okay, I need to find the shares first and then see if I can recover the
+    # # secret using this.
+
+    # sharelist = []
+
+    # for (username, password) in logindata:
+    #   if username not in self.accountdict:
+    #     raise ValueError("Unknown user '"+username+"'")
+
+    #   for entry in self.accountdict[username]:
+
+    #     # ignore shielded account entries...
+    #     if entry['sharenumber'] == 0:
+    #       continue
+
+    #     thissaltedpasswordhash = sha256(entry['salt']+password).digest()
+    #     thisshare = (entry['sharenumber'],
+    #         _do_bytearray_XOR(thissaltedpasswordhash,
+    #             entry['passhash'][:len(entry['passhash'])-self.isolated_check_bits]))
 
 
-    # Okay, I need to find the shares first and then see if I can recover the
-    # secret using this.
+    #     sharelist.append(thisshare)
+    # # This will raise a ValueError if a share is incorrect or there are other
+    # # issues (like not enough shares).
+    # self.shamirsecretobj.recover_secretdata(sharelist)
+    # if not self.verify_secret(self.shamirsecretobj.secretdata):
+    #     raise ValueError("This is not a valid secret recombination, wrong account information provided")
 
-    sharelist = []
+    # self.shieldedkey = self.shamirsecretobj.secretdata
 
-    for (username, password) in logindata:
-      if username not in self.accountdict:
-        raise ValueError("Unknown user '"+username+"'")
+    # # update bootstrap accounts to shielded accounts
+    # for entry in self.bootstrap_accounts:
+    #     entry['passshash'] = AES.new(self.shieldedkey).encrypt(entry['passhash'])
+    #     entry['sharenumber'] = 0
 
-      for entry in self.accountdict[username]:
-
-        # ignore shielded account entries...
-        if entry['sharenumber'] == 0:
-          continue
-
-        thissaltedpasswordhash = sha256(entry['salt']+password).digest()
-        thisshare = (entry['sharenumber'],
-            _do_bytearray_XOR(thissaltedpasswordhash,
-                entry['passhash'][:len(entry['passhash'])-self.isolated_check_bits]))
+    # # we shouldn't have any bootstrap accounts now
+    # self.bootstrap_accounts = []
 
 
-        sharelist.append(thisshare)
-    # This will raise a ValueError if a share is incorrect or there are other
-    # issues (like not enough shares).
-    self.shamirsecretobj.recover_secretdata(sharelist)
-    if not self.verify_secret(self.shamirsecretobj.secretdata):
-        raise ValueError("This is not a valid secret recombination, wrong account information provided")
-
-    self.shieldedkey = self.shamirsecretobj.secretdata
-
-    # update bootstrap accounts to shielded accounts
-    for entry in self.bootstrap_accounts:
-        entry['passshash'] = AES.new(self.shieldedkey).encrypt(entry['passhash'])
-        entry['sharenumber'] = 0
-
-    # we shouldn't have any bootstrap accounts now
-    self.bootstrap_accounts = []
-
-
-    # it worked!
-    self.knownsecret = True
+    # # it worked!
+    # self.knownsecret = True
 
   def isolated_validation(self, passhash, stored_hash):
     """

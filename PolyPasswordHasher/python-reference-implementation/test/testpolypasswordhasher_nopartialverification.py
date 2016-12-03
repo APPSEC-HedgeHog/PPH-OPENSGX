@@ -1,8 +1,8 @@
-import polypasswordhasher
-from unittest import TestCase
+# import polypasswordhasher
+# from unittest import TestCase
 
-import sys
-THRESHOLD = 10
+# import sys
+# THRESHOLD = 10
 # require knowledge of 10 shares to decode others.   Create a blank, new
 # password file...
 
