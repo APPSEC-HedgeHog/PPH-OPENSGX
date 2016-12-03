@@ -370,6 +370,26 @@ static PyObject *py_pph_unlock_password_data(PyObject *module, PyObject *args)
 
 }
 
+
+static PyObject *py_pph_destroy_context(PyObject *module, PyObject *args) {
+  unsigned int *ptr;
+
+  printf("py_pph_destroy_context \n");
+  if (!PyArg_ParseTuple(args, "i", &ptr)) {
+    // Incorrect args...
+    printf("incorrect args \n");
+    return NULL;
+  }
+  
+  pph_context *context = (pph_context *) ptr;
+  int ret = pph_destroy_context(context);
+  if (ret !=0 )
+    printf("Error destroying context \n");
+  
+  return Py_BuildValue("i",ret);
+}
+
+
 static PyObject *full_lagrange(PyObject *module, PyObject *args) {
   // The args are xs (an array of gf256s) and fxs (also an array of gf256s).  
  
@@ -514,6 +534,8 @@ static PyMethodDef MyFastPolyMathMethods [] = {
       "Reload context"},
   {"py_pph_unlock_password_data", py_pph_unlock_password_data, METH_VARARGS, 
       "Unlock password "},
+  {"py_pph_destroy_context", py_pph_destroy_context, METH_VARARGS,
+      "Destroy context"},
   {NULL, NULL, 0, NULL}
 };
 

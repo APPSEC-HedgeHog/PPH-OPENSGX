@@ -137,7 +137,7 @@ class PolyPasswordHasher(object):
     if passwordfile is not None:
       print('reloading the context')
       self.c_ptr = fastpolymath_c.py_pph_reload_context(passwordfile)
-      return
+      return 
 
     self.c_ptr = fastpolymath_c.py_pph_init_context(threshold,isolated_check_bits)
     print('PY: pph init context returned')
@@ -195,6 +195,21 @@ class PolyPasswordHasher(object):
     # self.nextavailableshare += self.nextavailableshare
 
 
+  def __enter__(self):
+    return self
+
+
+  def __exit__(self, exception_type, exception_value, traceback):
+    """
+      Destroy 
+    """
+    print "PY: Destroying context..."
+    ret = fastpolymath_c.py_pph_destroy_context(self.c_ptr)
+    if (ret is 0):
+      print "PY: Context destroyed" 
+    else:
+      print "PY: Context NOT destroyed!"
+    return self
 
 
 
