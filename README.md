@@ -57,7 +57,7 @@ Run Python Ref: //Before running make sure above commands are executed and the O
 	$ cd ROOT REPOSITORY / PolyPasswordHasher
 	$ sudo apt-get install python-pip //one time
 	$ pip install crypto //one time
-	$ export PYTHONPATH=$PWD/PolyPasswordHasher
+	$ export PYTHONPATH=$PWD/python-reference-implementation
 	$ cd python-reference-implementation
 	$ python setup.py test
 	
