@@ -124,7 +124,7 @@ pph_context* pph_init_context(uint8 threshold, uint8 isolated_check_bits) {
     
   }
 
-  print("Init context [%d] , [%d] \n", threshold, isolated_check_bits);
+  printf("Init context [%d] , [%d] \n", threshold, isolated_check_bits);
   context->threshold=threshold;
   
   // initialize the isolated-check-bits offset, this will be used to limit the

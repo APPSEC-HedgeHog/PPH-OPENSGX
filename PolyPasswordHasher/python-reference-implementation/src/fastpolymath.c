@@ -316,11 +316,11 @@ static PyObject *py_pph_unlock_password_data(PyObject *module, PyObject *args)
   int idx;
   unsigned int ptr;
 
-  char **username = malloc(sizeof (*username) * size);
-  char **password = malloc(sizeof (*password) * size);
-  int **username_length = malloc(sizeof (*username_length) * size);
-  int **password_length = malloc(sizeof (*password_length) * size);
-
+  // char **username = malloc(sizeof (*username) * size);
+  // char **password = malloc(sizeof (*password) * size);
+  // int **username_length = malloc(sizeof (*username_length) * size);
+  // int **password_length = malloc(sizeof (*password_length) * size);
+  
   printf("calliing unlock \n");
 
 
@@ -328,6 +328,11 @@ static PyObject *py_pph_unlock_password_data(PyObject *module, PyObject *args)
     return NULL;
 
   size = PyList_Size(listObj);  
+
+  char * username[size];
+  char * password[size];
+  int * username_length[size];
+  int * password_length[size];
 
   for(idx=0;idx<size;idx++)
   {
@@ -347,12 +352,7 @@ static PyObject *py_pph_unlock_password_data(PyObject *module, PyObject *args)
   int ret =pph_unlock_password_data(context,size, username, username_length, password, password_length );
   if(ret != 0)
     printf("Unable to unlock database[%d]\n",ret);
-
-  // free(username);
-  // free(password);
-  // free(username_length);
-  // free(password_length);
-
+  
   return Py_BuildValue("i",ret);
 
 

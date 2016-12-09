@@ -57,7 +57,7 @@ class TestPolyPasswordHasher(TestCase):
         print "Can't get here!   It's still bootstrapping!!!"
 
       # # with a threshold (or more) of correct passwords, it decodes and is usable.
-      pph.unlock_password_data([('admin','correct horse'), ('root','battery staple'), ('bob','puppy')])
+      pph.unlock_password_data([('admin','correct horse'), ('root','battery staple'), ('bob','puppy'),('superuser','purple monkey dishwasher')])
 
       # # now, I can do the usual operations with it...
       self.assertTrue(pph.is_valid_login('alice','kitten') == True)
